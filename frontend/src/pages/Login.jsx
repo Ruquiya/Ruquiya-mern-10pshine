@@ -5,6 +5,9 @@ export default function Login({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [animate, setAnimate] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -15,6 +18,15 @@ export default function Login({ onLogin }) {
   const formRef = useRef(null)
 
   useEffect(() => {
+
+    const savedEmail = localStorage.getItem('savedEmail')
+    const savedRememberMe = localStorage.getItem('rememberMe') === 'true'
+    
+    if (savedEmail && savedRememberMe) {
+      setFormData(prev => ({ ...prev, email: savedEmail }))
+      setRememberMe(true)
+    }
+
     setAnimate(true)
     const handleResize = () => {
       window.scrollTo(0, 0)
@@ -23,7 +35,7 @@ export default function Login({ onLogin }) {
     handleResize()
     window.addEventListener('resize', handleResize)
     
-    // Add custom styles to document head
+
     const style = document.createElement('style')
     style.textContent = `
       @keyframes float {
@@ -107,6 +119,16 @@ export default function Login({ onLogin }) {
     setError('')
   }
 
+  const handleRememberMeChange = (e) => {
+    const isChecked = e.target.checked
+    setRememberMe(isChecked)
+    
+    if (!isChecked) {
+      localStorage.removeItem('savedEmail')
+      localStorage.removeItem('rememberMe')
+    }
+  }
+
   const validateForm = () => {
     if (!isLogin) {
       if (formData.password.length < 8) {
@@ -119,55 +141,79 @@ export default function Login({ onLogin }) {
       }
     }
     
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.email)) {
       setError('Please enter a valid email address')
       return false
     }
 
-    return true
+  return true
+}
+
+const handleForgotPassword = async (e) => {
+  e.preventDefault()
+  if (!forgotPasswordEmail) {
+    setError('Please enter your email address')
+    return
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  setIsLoading(true)
+  try {
+    await api.post('/auth/forgot-password', {
+      email: forgotPasswordEmail
+    })
     setError('')
+    alert('Password reset link sent to your email!')
+    setShowForgotPassword(false)
+    setForgotPasswordEmail('')
+  } catch (err) {
+    setError(err.response?.data?.message || 'Failed to send reset email')
+  } finally {
+    setIsLoading(false)
+  }
+}
 
-    if (!validateForm()) {
-      return
-    }
+const handleSubmit = async (e) => {
+  e.preventDefault()
+  setError('')
 
-    setIsLoading(true)
-
-    try {
-      let response
-      if (isLogin) {
-        response = await api.login({
-          email: formData.email,
-          password: formData.password
-        })
-      } else {
-        response = await api.register({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          confirmPassword: formData.confirmPassword
-        })
-      }
-
-      if (response.success) {
-        localStorage.setItem('token', response.data.token)
-        localStorage.setItem('user', JSON.stringify(response.data))
-        onLogin()
-      }
-    } catch (error) {
-      console.error('API Error:', error)
-      setError(error.message || 'Something went wrong. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
+  if (!validateForm()) {
+    return
   }
 
+  setIsLoading(true)
+
+  try {
+    let response
+    if (isLogin) {
+      response = await api.login({
+        email: formData.email,
+        password: formData.password,
+        rememberMe: rememberMe
+      })
+    } else {
+      response = await api.register({
+        name: formData.name, 
+        email: formData.email,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword
+      })
+    }
+
+    if (response.success) {
+      if (response.token) {
+        localStorage.setItem('token', response.token)
+      }
+      localStorage.setItem('user', JSON.stringify(response.data))
+      onLogin()
+    }
+  } catch (error) {
+    console.error('API Error:', error)
+    setError(error.message || 'Something went wrong. Please try again.')
+  } finally {
+    setIsLoading(false)
+  }
+}
   const handleToggle = (login) => {
     setIsLogin(login)
     setError('')
@@ -345,28 +391,42 @@ export default function Login({ onLogin }) {
 
           {isLogin && (
             <div className="flex items-center justify-between px-1 sm:text-xs my-4 sm:my-3">
-              <label className="flex items-center space-x-2">
+              <label className="flex items-center space-x-2 cursor-pointer">
                 <div className="relative">
                   <input
                     type="checkbox"
                     className="sr-only"
+                    checked={rememberMe}
+                    onChange={handleRememberMeChange}
                     aria-label="Remember me"
                   />
-                  <div className="w-4 h-4 bg-gray-700 rounded border border-gray-600 flex items-center justify-center transition-all duration-300 hover:border-cyan-500 sm:w-3 sm:h-3">
-                    <svg className="w-2 h-2 text-cyan-500 opacity-0 sm:w-1.5 sm:h-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-300 hover:border-cyan-500 sm:w-3 sm:h-3 ${
+                    rememberMe 
+                      ? 'bg-cyan-500 border-cyan-500' 
+                      : 'bg-gray-700 border-gray-600'
+                  }`}>
+                    <svg 
+                      className={`w-2 h-2 text-white transition-opacity duration-200 sm:w-1.5 sm:h-1.5 ${
+                        rememberMe ? 'opacity-100' : 'opacity-0'
+                      }`} 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                 </div>
                 <span className="text-gray-300 text-sm sm:text-xs">Remember me</span>
               </label>
-              <a 
-                href="#" 
+              <button 
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
                 className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors duration-300 font-medium sm:text-xs"
                 aria-label="Forgot password"
               >
                 Forgot password?
-              </a>
+              </button>
             </div>
           )}
 
@@ -432,6 +492,56 @@ export default function Login({ onLogin }) {
           </div>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-semibold text-white mb-4">Reset Password</h3>
+            <p className="text-gray-300 text-sm mb-4">
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
+            
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <input
+                  type="email"
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  required
+                />
+              </div>
+              
+              {error && (
+                <div className="text-red-400 text-sm">{error}</div>
+              )}
+              
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false)
+                    setForgotPasswordEmail('')
+                    setError('')
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 text-white rounded-lg hover:from-cyan-600 hover:to-purple-700 transition-all disabled:opacity-50"
+                >
+                  {isLoading ? 'Sending...' : 'Send Reset Link'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
