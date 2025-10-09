@@ -1,178 +1,160 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const validator = require('validator');
 
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '30d',
+const generateToken = (userId, rememberMe = false) => {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'fallback_secret', {
+    expiresIn: rememberMe ? '30d' : '1d',
   });
 };
 
-// @desc    Register user
-// @route   POST /api/auth/register
-// @access  Public
-const register = async (req, res) => {
+
+exports.register = async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
 
-    // === Validation checks ===
-    if (!name || !email || !password || !confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'All fields are required (name, email, password, confirmPassword)',
-      });
-    }
-
-    if (!validator.isEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid email',
-      });
-    }
-
+  
     if (password !== confirmPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Passwords do not match',
+        message: 'Passwords do not match'
       });
     }
 
-    if (password.length < 8) {
+    const username = name ? name.toLowerCase().replace(/\s+/g, '') + Math.random().toString(36).substring(2, 8) : email.split('@')[0] + Math.random().toString(36).substring(2, 8);
+
+    const existingUser = await User.findOne({ email });
+
+    if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 8 characters long',
+        message: 'User already exists with this email'
       });
     }
 
-    // Strong password check (uppercase, lowercase, number, special char)
-    const strongPasswordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/;
-    if (!strongPasswordRegex.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Password must include at least one uppercase letter, one lowercase letter, one number, and one special character',
-      });
-    }
-
-    // Check if user already exists
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists with this email',
-      });
-    }
-
-    // Create user
-    const user = await User.create({
+    const user = new User({
+      username,
       name,
       email,
-      password,
+      password
     });
 
-    if (user) {
-      const token = generateToken(user._id);
+    await user.save();
 
-      res.status(201).json({
-        success: true,
-        message: 'User registered successfully',
-        data: {
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          token,
-        },
+    const token = generateToken(user._id);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        _id: user._id,
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        profilePicture: user.profilePicture,
+        preferences: user.preferences,
+        displayName: user.displayName
+      },
+      token
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    
+
+    if (error.code === 11000 && error.keyPattern.username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username already exists. Please try again.'
       });
     }
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({
+    
+    res.status(400).json({
       success: false,
-      message: 'Server error during registration',
+      message: error.message
     });
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
-const login = async (req, res) => {
+exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    console.log('Login request body:', req.body);
+    const { email, password, rememberMe = false } = req.body;
 
-    // Validation checks
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email and password',
+        message: 'Email and password are required'
       });
     }
 
-    if (!validator.isEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid email',
-      });
-    }
-
-    // Check if user exists and password is correct
     const user = await User.findOne({ email }).select('+password');
-    console.log('User found:', user ? 'User exists' : 'No user found');
-
-    if (!user || !(await user.comparePassword(password))) {
+    
+    if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password',
+        message: 'Invalid email or password'
       });
     }
 
-    const token = generateToken(user._id);
-    console.log('Generated token:', token);
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
 
-    res.status(200).json({
+    if (rememberMe !== undefined) {
+      user.rememberMe = rememberMe;
+      await user.save();
+    }
+
+    if (!user.username) {
+      user.username = user.name ? 
+        user.name.toLowerCase().replace(/\s+/g, '') + Math.random().toString(36).substring(2, 6) :
+        user.email.split('@')[0] + Math.random().toString(36).substring(2, 6);
+      await user.save();
+    }
+    const token = generateToken(user._id, rememberMe);
+
+    res.json({
       success: true,
-      message: 'Login successful',
       data: {
         _id: user._id,
+        username: user.username,
         name: user.name,
         email: user.email,
-        token,
+        profilePicture: user.profilePicture,
+        preferences: user.preferences,
+        rememberMe: user.rememberMe,
+        displayName: user.displayName
       },
+      token
     });
   } catch (error) {
-    console.error('Login error:', error.message, error.stack);
+    console.error('Login error:', error);
+    
     res.status(500).json({
       success: false,
-      message: `Server error during login: ${error.message}`,
+      message: 'Server error during login'
     });
   }
 };
 
-// @desc    Get current user
-// @route   GET /api/auth/me
-// @access  Private
-const getMe = async (req, res) => {
+exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-
-    res.status(200).json({
+   
+    const userData = {
+      ...req.user.toObject(),
+      displayName: req.user.displayName
+    };
+    
+    res.json({
       success: true,
-      data: user,
+      data: userData
     });
   } catch (error) {
-    console.error('Get user error:', error);
+    console.error('Get me error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: error.message
     });
   }
-};
-
-module.exports = {
-  register,
-  login,
-  getMe,
 };
