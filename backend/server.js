@@ -1,52 +1,55 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
-require("dotenv").config({ debug: true });
-
+const express = require('express');
+const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
+const noteRoutes = require('./routes/notes');
+const userRoutes = require('./routes/users');
+const folderRoutes = require('./routes/folders');
+const cors = require('cors');
+
+dotenv.config();
+connectDB();
 
 const app = express();
 
-// Connect to database
-connectDB();
-
-// CORS configuration - allow both localhost:3000 and localhost:5173
-app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
-
-// Handle preflight requests
-app.options('*', cors());
-
 // Middleware
+app.use(cors({
+  origin: [
+    'http://localhost:3000', // CRA
+    'http://localhost:5173'  // Vite
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/notes', noteRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/folders', folderRoutes);
 
-// Basic route
-app.get("/", (req, res) => {
+// Debug endpoint
+app.get('/api/debug', (req, res) => {
   res.json({ 
-    message: "Backend is running...",
-    endpoints: {
-      register: "POST /api/auth/register",
-      login: "POST /api/auth/login",
-      getProfile: "GET /api/auth/me"
-    }
+    message: 'Server is running and routes are loaded', 
+    timestamp: new Date(),
+    routes: ['/api/auth', '/api/notes', '/api/users', '/api/folders']
   });
 });
 
-// Handle undefined routes
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ success: false, message: 'Server error' });
+});
+
+// Handle 404
 app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
+  res.status(404).json({ 
+    success: false, 
+    message: `Route not found: ${req.originalUrl}` 
   });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
