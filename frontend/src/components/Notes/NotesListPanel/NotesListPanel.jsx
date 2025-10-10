@@ -1,4 +1,3 @@
-// NotesListPanel.jsx
 import React from 'react';
 
 const NotesListPanel = ({ notes, selectedNote, setSelectedNote, darkMode }) => {
@@ -6,8 +5,8 @@ const NotesListPanel = ({ notes, selectedNote, setSelectedNote, darkMode }) => {
     <aside
       className={`w-64 theme-transition overflow-y-auto border-r ${
         darkMode
-          ? 'bg-gray-800/90 border-white/10'
-          : 'bg-white border-gray-200'
+          ? 'bg-gray-800/90 border-white/10 backdrop-blur-sm'
+          : 'bg-white/90 border-gray-200 backdrop-blur-sm'
       }`}
     >
       <div className="p-4">
@@ -40,19 +39,28 @@ const NotesListPanel = ({ notes, selectedNote, setSelectedNote, darkMode }) => {
                   : 'hover:bg-gray-100 border border-transparent'
               }`}
             >
-              <h4
-                className={`font-medium text-sm mb-1 theme-transition ${
-                  darkMode ? 'text-white' : 'text-gray-900'
-                }`}
-              >
-                {note.title}
-              </h4>
+              <div className="flex items-center gap-2 mb-1">
+                {note.type === 'todo' && '✅'}
+                {note.type === 'code' && '💻'}
+                {note.type === 'audio' && '🎤'}
+                {note.type === 'drawing' && '🎨'}
+                <h4
+                  className={`font-medium text-sm theme-transition ${
+                    darkMode ? 'text-white' : 'text-gray-900'
+                  }`}
+                >
+                  {note.title}
+                </h4>
+              </div>
               <p
                 className={`text-xs line-clamp-1 mb-1 theme-transition ${
                   darkMode ? 'text-gray-300' : 'text-gray-600'
                 }`}
               >
-                {note.content}
+                {note.type === 'todo' ? 'Todo List' : 
+                 note.type === 'code' ? 'Code Snippet' :
+                 note.type === 'audio' ? 'Voice Recording' :
+                 note.type === 'drawing' ? 'Drawing' : note.content}
               </p>
               <div
                 className={`flex items-center text-xs theme-transition ${
@@ -77,11 +85,6 @@ const NotesListPanel = ({ notes, selectedNote, setSelectedNote, darkMode }) => {
             </button>
           ))}
         </div>
-        <button className={`fixed bottom-4 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full shadow-lg transition-all duration-200 hover:scale-110 ${
-          darkMode ? 'bg-cyan-500 hover:bg-cyan-600' : 'bg-cyan-600 hover:bg-cyan-700'
-        } text-white`}>
-          +
-        </button>
       </div>
     </aside>
   );

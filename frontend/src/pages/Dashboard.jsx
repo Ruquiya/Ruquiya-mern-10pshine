@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Header from '../components/Header/Header';
 import Sidebar from '../components/Sidebar/Sidebar';
 import MainContent from '../components/MainContent/MainContent';
+import CreateNote from '../components/Notes/CreateNote/CreateNote';
+import CreateFolderModal from '../components/Folder/CreateFolderModal/CreateFolderModal';
+import EditProfile from '../components/Header/EditProfile'; 
 
 const Dashboard = () => {
   const [activeCategory, setActiveCategory] = useState('all');
@@ -10,7 +13,12 @@ const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedNote, setSelectedNote] = useState(null);
   const [darkMode, setDarkMode] = useState(true);
+  const [showEditProfile, setShowEditProfile] = useState(false); 
+  const [notes, setNotes] = useState([]);
   const [createNoteModal, setCreateNoteModal] = useState(false);
+  const [folders, setFolders] = useState([]);
+  const [createFolderModal, setCreateFolderModal] = useState(false);
+  const [editingFolder, setEditingFolder] = useState(null);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -26,18 +34,149 @@ const Dashboard = () => {
       }
     `;
     document.head.appendChild(style);
-    
     return () => {
       document.head.removeChild(style);
     };
   }, []);
 
+  const fetchFolders = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/folders', {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFolders(data);
+      } else {
+        console.error('Failed to fetch folders');
+      }
+    } catch (error) {
+      console.error('Error fetching folders:', error);
+    }
+  };
+
+  const fetchNotes = async (category = 'all') => {
+    try {
+      const token = localStorage.getItem('token');
+      const url =
+        category === 'trash'
+          ? 'http://localhost:5000/api/notes?category=trash'
+          : 'http://localhost:5000/api/notes';
+
+      const res = await fetch(url, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotes(Array.isArray(data?.data) ? data.data : []);
+      }
+    } catch (e) {
+      console.error('Failed to load notes', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchFolders();
+    fetchNotes();
+  }, []);
+
+  useEffect(() => {
+    fetchNotes(activeCategory);
+  }, [activeCategory]);
+
+  const handleSaveNote = async (newNote) => {
+    try {
+      await fetchNotes(); 
+      setCreateNoteModal(false);
+    } catch (error) {
+      console.error('Error refreshing notes:', error);
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    try {
+      setNotes((prevNotes) => prevNotes.filter((note) => note._id !== noteId));
+      if (selectedNote && selectedNote._id === noteId) {
+        setSelectedNote(null);
+      }
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/notes/${noteId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        console.error('Failed to delete note from backend');
+        await fetchNotes();
+      }
+    } catch (error) {
+      console.error('Error deleting note:', error);
+      await fetchNotes();
+    }
+  };
+
+  const handleEditNote = (note) => {
+    console.log('Edit note:', note);
+    setSelectedNote(null);
+  };
+
+  const handleSaveFolder = async (folderData) => {
+    try {
+      await fetchFolders();
+      setCreateFolderModal(false);
+      setEditingFolder(null);
+    } catch (error) {
+      console.error('Error refreshing folders:', error);
+    }
+  };
+
+  const handleEditFolder = (folder) => {
+    setEditingFolder(folder);
+    setCreateFolderModal(true);
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    if (window.confirm('Are you sure you want to delete this folder? Notes will not be deleted.')) {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`http://localhost:5000/api/folders/${folderId}`, {
+          method: 'DELETE',
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (response.ok) {
+          await fetchFolders();
+        } else {
+          console.error('Failed to delete folder');
+        }
+      } catch (error) {
+        console.error('Error deleting folder:', error);
+      }
+    }
+  };
+
+  const handleEditProfile = () => {
+    setShowEditProfile(true);
+  };
+
   return (
-    <div className={`min-h-screen theme-transition ${
-      darkMode 
-        ? 'bg-gradient-to-br from-gray-900 to-indigo-900 text-white' 
-        : 'bg-gradient-to-br from-gray-50 to-blue-50 text-gray-900'
-    }`}>
+    <div
+      className={`min-h-screen theme-transition ${
+        darkMode
+          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white'
+          : 'bg-gradient-to-br from-gray-50 to-blue-50 text-gray-900'
+      }`}
+    >
       <Header
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
@@ -46,185 +185,84 @@ const Dashboard = () => {
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         onCreateNote={() => setCreateNoteModal(true)}
+        onCreateFolder={() => setCreateFolderModal(true)}
+        onEditProfile={handleEditProfile}
       />
-      <div className="flex flex-1 overflow-hidden">
+
+      <div className="flex flex-1 overflow-hidden relative">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         <Sidebar
           activeCategory={activeCategory}
           setActiveCategory={setActiveCategory}
           isOpen={sidebarOpen}
           darkMode={darkMode}
+          notes={notes}
+          folders={folders}
+          onCreateFolder={() => setCreateFolderModal(true)}
+          onClose={() => setSidebarOpen(false)}
         />
-        <MainContent
-          activeCategory={activeCategory}
-          activeFilter={activeFilter}
-          setActiveFilter={setActiveFilter}
-          searchTerm={searchTerm}
-          selectedNote={selectedNote}
-          setSelectedNote={setSelectedNote}
-          darkMode={darkMode}
-          sidebarOpen={sidebarOpen}
-          onCreateNote={() => setCreateNoteModal(true)}
-        />
-      </div>
 
-      {/* Create Note Modal */}
-      {createNoteModal && (
-        <CreateNoteModal 
-          darkMode={darkMode} 
-          onClose={() => setCreateNoteModal(false)} 
-        />
-      )}
-    </div>
-  );
-};
-
-// Create Note Modal Component
-const CreateNoteModal = ({ darkMode, onClose }) => {
-  const [selectedType, setSelectedType] = useState('text');
-
-  const noteTypes = [
-    { 
-      type: 'text', 
-      label: 'Text Note', 
-      icon: '📝',
-      description: 'Simple text note with formatting',
-      color: 'from-blue-500 to-cyan-500'
-    },
-    { 
-      type: 'todo', 
-      label: 'To-Do List', 
-      icon: '✅',
-      description: 'Checklist with tasks',
-      color: 'from-green-500 to-emerald-500'
-    },
-    { 
-      type: 'code', 
-      label: 'Code Snippet', 
-      icon: '💻',
-      description: 'Code with syntax highlighting',
-      color: 'from-purple-500 to-pink-500'
-    },
-    { 
-      type: 'drawing', 
-      label: 'Drawing', 
-      icon: '🎨',
-      description: 'Sketch and draw',
-      color: 'from-orange-500 to-red-500'
-    },
-    { 
-      type: 'audio', 
-      label: 'Voice Note', 
-      icon: '🎤',
-      description: 'Record audio notes',
-      color: 'from-indigo-500 to-purple-500'
-    },
-    { 
-      type: 'link', 
-      label: 'Web Link', 
-      icon: '🔗',
-      description: 'Save and organize links',
-      color: 'from-cyan-500 to-blue-500'
-    }
-  ];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className={`relative rounded-2xl shadow-2xl max-w-2xl w-full mx-4 ${
-        darkMode ? 'bg-gray-800' : 'bg-white'
-      }`}>
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-              Create New Note
-            </h2>
-            <button
-              onClick={onClose}
-              className={`p-2 rounded-lg transition-all duration-200 hover:scale-110 ${
-                darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
-              }`}
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-            {noteTypes.map((noteType) => (
-              <button
-                key={noteType.type}
-                onClick={() => setSelectedType(noteType.type)}
-                className={`p-4 rounded-xl text-left transition-all duration-200 transform hover:scale-105 ${
-                  selectedType === noteType.type
-                    ? `bg-gradient-to-r ${noteType.color} text-white shadow-lg`
-                    : darkMode
-                    ? 'bg-gray-700/50 text-gray-200 hover:bg-gray-600/50'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <div className="text-2xl mb-2">{noteType.icon}</div>
-                <h3 className="font-semibold text-sm mb-1">{noteType.label}</h3>
-                <p className="text-xs opacity-80">{noteType.description}</p>
-              </button>
-            ))}
-          </div>
-
-          {/* Preview based on selected type */}
-          <div className={`p-4 rounded-xl mb-6 ${
-            darkMode ? 'bg-gray-700/30' : 'bg-gray-100'
-          }`}>
-            <h3 className={`font-semibold mb-3 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-              Preview - {noteTypes.find(t => t.type === selectedType)?.label}
-            </h3>
-            {selectedType === 'todo' ? (
-              <div className="space-y-2">
-                {['Task 1', 'Task 2', 'Task 3'].map((task, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                      darkMode ? 'border-gray-400' : 'border-gray-500'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full bg-gradient-to-r from-green-500 to-emerald-500`} />
-                    </div>
-                    <span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>{task}</span>
-                  </div>
-                ))}
-                <div className="flex items-center gap-3 opacity-50">
-                  <div className={`w-5 h-5 rounded border-2 ${darkMode ? 'border-gray-600' : 'border-gray-400'}`} />
-                  <span className={darkMode ? 'text-gray-500' : 'text-gray-400'}>Add new task...</span>
-                </div>
-              </div>
-            ) : (
-              <div className={`p-3 rounded-lg ${
-                darkMode ? 'bg-gray-600/30 text-gray-300' : 'bg-white text-gray-600'
-              }`}>
-                Start typing your {selectedType} note here...
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all duration-200 ${
-                darkMode 
-                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                // Handle note creation
-                onClose();
-              }}
-              className="flex-1 py-3 px-4 rounded-lg font-medium text-white bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
-            >
-              Create Note
-            </button>
-          </div>
+        <div className="flex-1 overflow-y-auto p-2 md:p-4 space-y-4 md:space-y-6">
+          <MainContent
+            activeCategory={activeCategory}
+            activeFilter={activeFilter}
+            setActiveFilter={setActiveFilter}
+            searchTerm={searchTerm}
+            selectedNote={selectedNote}
+            setSelectedNote={setSelectedNote}
+            darkMode={darkMode}
+            sidebarOpen={sidebarOpen}
+            onCreateNote={() => setCreateNoteModal(true)}
+            onCreateFolder={() => setCreateFolderModal(true)}
+            onEditFolder={handleEditFolder}
+            onDeleteFolder={handleDeleteFolder}
+            onEditNote={handleEditNote}
+            onDeleteNote={handleDeleteNote}
+            notes={notes}
+            folders={folders}
+            fetchNotes={fetchNotes}
+            fetchFolders={fetchFolders}
+          />
         </div>
       </div>
+
+      {/* Modals*/}
+      {createNoteModal && (
+        <CreateNote
+          darkMode={darkMode}
+          onClose={() => setCreateNoteModal(false)}
+          onSave={handleSaveNote}
+          folders={folders}
+        />
+      )}
+
+      {createFolderModal && (
+        <CreateFolderModal
+          darkMode={darkMode}
+          onClose={() => {
+            setCreateFolderModal(false);
+            setEditingFolder(null);
+          }}
+          onSave={handleSaveFolder}
+          folderToEdit={editingFolder}
+          allNotes={notes}
+        />
+      )}
+
+      {/* Edit Profile Modal*/}
+      {showEditProfile && (
+        <EditProfile
+          isOpen={showEditProfile}
+          onClose={() => setShowEditProfile(false)}
+          darkMode={darkMode}
+        />
+      )}
     </div>
   );
 };
