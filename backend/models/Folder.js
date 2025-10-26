@@ -16,6 +16,26 @@ const noteSchema = new mongoose.Schema({
   text: {
     type: String,
     default: ''
+  },
+  type: {
+    type: String,
+    default: 'text'
+  },
+  color: {
+    type: String,
+    default: ''
+  },
+  pinned: {
+    type: Boolean,
+    default: false
+  },
+  important: {
+    type: Boolean,
+    default: false
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
 }, { _id: false });
 
@@ -56,7 +76,7 @@ const folderSchema = new mongoose.Schema({
   timestamps: true
 });
 
-
+// Update noteCount before saving
 folderSchema.pre('save', function(next) {
   this.noteCount = this.notes.length;
   next();

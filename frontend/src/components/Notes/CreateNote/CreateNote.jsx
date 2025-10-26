@@ -120,30 +120,81 @@ const CreateNote = ({ darkMode, onClose, onSave, folders = [] }) => {
         content: noteData.content,
         type: noteData.type,
         tags: noteData.tags,
-        folder: noteData.folder,
+        folder: noteData.folder, // This ensures the folder is saved with the note
         color: noteData.color,
         pinned: noteData.pinned,
         important: noteData.important,
         reminder: reminderData
       };
 
-      console.log('💾 Saving note:', finalNote);
+      console.log('💾 Saving note with folder:', finalNote.folder);
       
       const result = await noteService.createNote(finalNote);
       
       console.log('Save response:', result);
       
       if (result.success) {
+        // Also update the folder with this note if it's not "General"
+        if (noteData.folder !== 'General') {
+          await updateFolderWithNote(result.data, noteData.folder);
+        }
+        
         onSave(result.data);
         onClose();
       } else {
         setError(result.message || 'Failed to save note');
       }
     } catch (error) {
-      console.error(' Error saving note:', error);
+      console.error('❌ Error saving note:', error);
       setError(error.message || 'Failed to save note. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Function to update folder with the new note
+  const updateFolderWithNote = async (note, folderName) => {
+    try {
+      // Find the folder by name
+      const folder = folders.find(f => f.name === folderName);
+      if (!folder) {
+        console.log('Folder not found:', folderName);
+        return;
+      }
+
+      const noteToAdd = {
+        _id: note._id || note.id,
+        title: note.title,
+        content: note.content,
+        text: note.title // For display in folder
+      };
+
+      // Update folder with new note
+      const updatedFolder = {
+        ...folder,
+        notes: [...(folder.notes || []), noteToAdd],
+        noteCount: (folder.notes?.length || 0) + 1
+      };
+
+      // Call folder update API
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/folders/${folder._id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(updatedFolder),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update folder with note');
+      }
+
+      console.log('✅ Note added to folder successfully');
+    } catch (error) {
+      console.error('❌ Error updating folder with note:', error);
+      // Don't throw error here - note is already saved, just folder update failed
     }
   };
 
@@ -232,7 +283,7 @@ const CreateNote = ({ darkMode, onClose, onSave, folders = [] }) => {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-              </button>
+            </button>
             </div>
           </div>
           
@@ -348,6 +399,9 @@ const CreateNote = ({ darkMode, onClose, onSave, folders = [] }) => {
                         </option>
                       ))}
                     </select>
+                    <p className={`text-xs mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Note will be saved in the selected folder
+                    </p>
                   </div>
 
                   {/* Templates */}
@@ -517,6 +571,7 @@ const CreateNote = ({ darkMode, onClose, onSave, folders = [] }) => {
                     </div>
                     <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                       <strong>Type:</strong> {noteData.type} | 
+                      <strong> Folder:</strong> {noteData.folder} |
                       <strong> Tags:</strong> {noteData.tags.length} | 
                       <strong> Pinned:</strong> {noteData.pinned ? 'Yes' : 'No'} | 
                       <strong> Important:</strong> {noteData.important ? 'Yes' : 'No'} |

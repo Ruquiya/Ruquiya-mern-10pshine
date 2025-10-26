@@ -18,11 +18,14 @@ import {
   FaQuoteRight,
   FaTable,
   FaPalette,
-  FaChevronDown
+  FaChevronDown,
+  FaUpload,
+  FaFileImage
 } from 'react-icons/fa';
 
 const TextNoteEditor = ({ content, onChange, darkMode }) => {
   const editorRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [isToolbarOpen, setIsToolbarOpen] = useState(true);
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
@@ -30,10 +33,13 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
     bold: false,
     italic: false,
     underline: false,
-    heading: false
+    heading: false,
+    list: false
   });
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontSize, setShowFontSize] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const textColors = [
     { name: 'Default', value: darkMode ? '#ffffff' : '#000000' },
@@ -53,6 +59,14 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
     { label: 'XX-Large', value: '7' },
   ];
 
+  // Initialize with empty content if needed
+  useEffect(() => {
+    if (editorRef.current && !content) {
+      editorRef.current.innerHTML = '';
+      updateEditorState();
+    }
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showColorPicker || showFontSize) {
@@ -67,6 +81,16 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
     };
   }, [showColorPicker, showFontSize]);
 
+  // Save to history when content changes
+  useEffect(() => {
+    if (content && history[historyIndex] !== content) {
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push(content);
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+    }
+  }, [content]);
+
   const updateEditorState = () => {
     if (editorRef.current) {
       const text = editorRef.current.innerText || '';
@@ -74,73 +98,181 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       setCharCount(text.length);
  
       const selection = window.getSelection();
-      if (selection.rangeCount > 0) {
-        const node = selection.getRangeAt(0).startContainer.parentNode;
+      if (selection.rangeCount > 0 && selection.toString().length > 0) {
+        const range = selection.getRangeAt(0);
+        const node = range.startContainer.parentElement;
+        
+        // Check if we're in a list
+        const inList = node.closest('ul, ol');
+        
         setActiveFormats({
           bold: document.queryCommandState('bold'),
           italic: document.queryCommandState('italic'),
           underline: document.queryCommandState('underline'),
-          heading: node.tagName && node.tagName.match(/^H[1-6]$/i)
+          heading: node.tagName && node.tagName.match(/^H[1-6]$/i),
+          list: !!inList
+        });
+      } else {
+        // Reset formats when no selection
+        setActiveFormats({
+          bold: false,
+          italic: false,
+          underline: false,
+          heading: false,
+          list: false
         });
       }
     }
   };
 
-
   const applyFormat = (command, value = null) => {
+    // Save current selection
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+
+    // Apply the command
     document.execCommand(command, false, value);
+    editorRef.current.focus();
     updateEditorState();
     onChange(editorRef.current.innerHTML);
   };
-
 
   const insertHTML = (html) => {
     document.execCommand('insertHTML', false, html);
+    editorRef.current.focus();
     updateEditorState();
     onChange(editorRef.current.innerHTML);
   };
-
 
   const addLink = () => {
     const url = prompt('Enter URL:');
     if (url) {
-      applyFormat('createLink', url);
+      // Check if URL has protocol, add https if not
+      const formattedUrl = url.startsWith('http') ? url : `https://${url}`;
+      applyFormat('createLink', formattedUrl);
     }
   };
 
-  const addImage = () => {
-    const url = prompt('Enter image URL:');
-    if (url) {
-      insertHTML(`<img src="${url}" alt="Image" style="max-width: 100%; height: auto; border-radius: 4px;" />`);
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // Check if file is an image
+      if (!file.type.match('image.*')) {
+        alert('Please select an image file');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Calculate dimensions to maintain aspect ratio
+          const maxWidth = 400;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+
+          const imgHTML = `<img src="${e.target.result}" alt="Uploaded image" style="max-width: ${width}px; height: ${height}px; border-radius: 8px; margin: 10px 0;" />`;
+          insertHTML(imgHTML);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+      
+      // Reset file input
+      event.target.value = '';
     }
   };
 
+  const triggerImageUpload = () => {
+    fileInputRef.current?.click();
+  };
 
   const addTable = () => {
     const html = `
-      <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+      <table style="width: 100%; border-collapse: collapse; margin: 10px 0; border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'};">
         <tr>
-          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 8px;">Cell 1</td>
-          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 8px;">Cell 2</td>
+          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 12px; text-align: left;">Cell 1</td>
+          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 12px; text-align: left;">Cell 2</td>
         </tr>
         <tr>
-          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 8px;">Cell 3</td>
-          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 8px;">Cell 4</td>
+          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 12px; text-align: left;">Cell 3</td>
+          <td style="border: 1px solid ${darkMode ? '#4b5563' : '#d1d5db'}; padding: 12px; text-align: left;">Cell 4</td>
         </tr>
       </table>
+      <div><br></div>
     `;
     insertHTML(html);
   };
 
-
   const clearFormatting = () => {
-    applyFormat('removeFormat');
-    applyFormat('unlink');
+    // Save selection
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      
+      // Remove formatting from selected text
+      document.execCommand('removeFormat', false, null);
+      document.execCommand('unlink', false, null);
+      
+      // Also remove any font tags and spans with style
+      if (range.toString().length > 0) {
+        const selectedHtml = range.cloneContents();
+        const tempDiv = document.createElement('div');
+        tempDiv.appendChild(selectedHtml);
+        
+        // Remove style attributes and specific tags
+        tempDiv.querySelectorAll('*').forEach(el => {
+          el.removeAttribute('style');
+          el.removeAttribute('class');
+          if (el.tagName.toLowerCase() === 'font') {
+            const parent = el.parentNode;
+            while (el.firstChild) {
+              parent.insertBefore(el.firstChild, el);
+            }
+            parent.removeChild(el);
+          }
+        });
+        
+        range.deleteContents();
+        range.insertNode(tempDiv);
+      }
+      
+      updateEditorState();
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = history[newIndex];
+        updateEditorState();
+      }
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = history[newIndex];
+        updateEditorState();
+      }
+    }
   };
 
   const focusEditor = () => {
     if (editorRef.current) {
       editorRef.current.focus();
+      // Move cursor to end
       const range = document.createRange();
       range.selectNodeContents(editorRef.current);
       range.collapse(false);
@@ -157,33 +289,137 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       .replace(/style="[^"]*direction:\s*rtl[^"]*"/gi, '')
       .replace(/style="[^"]*unicode-bidi:[^"]*"/gi, '')
       .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&')
-      .replace(/&quot;/g, '"')
-      .replace(/&#x27;/g, "'")
-      .replace(/&#x2F;/g, '/');
+      .replace(/<div><br><\/div>/gi, '<br>')
+      .replace(/<div>/gi, '<br>')
+      .replace(/<\/div>/gi, '');
 
     return sanitized;
   };
 
   useEffect(() => {
-    if (editorRef.current && content !== editorRef.current.innerHTML) {
-      const cleanContent = content?.replace(/<div[^>]*style="[^"]*text-align:\s*left[^"]*"[^>]*>(.*?)<\/div>/gi, '$1') || '';
-      editorRef.current.innerHTML = cleanContent || '';
+    if (editorRef.current && content !== undefined && content !== editorRef.current.innerHTML) {
+      editorRef.current.innerHTML = content || '';
+      updateEditorState();
     }
-    updateEditorState();
   }, [content]);
 
   const handleContentChange = (newContent) => {
-
     const sanitizedContent = sanitizeContent(newContent);
     onChange(sanitizedContent);
   };
 
   const handleToolbarClick = (e, action) => {
+    e.preventDefault();
     e.stopPropagation();
-    action();
+    // Focus editor first to ensure commands work properly
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+    // Small delay to ensure focus is applied
+    setTimeout(action, 10);
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    
+    // Get plain text from clipboard
+    const text = e.clipboardData.getData('text/plain');
+    
+    // Insert text at cursor position
+    document.execCommand('insertText', false, text);
+    
+    // Update content
+    setTimeout(() => {
+      handleContentChange(editorRef.current.innerHTML);
+      updateEditorState();
+    }, 0);
+  };
+
+  const handleKeyDown = (e) => {
+    // Handle keyboard shortcuts
+    if (e.ctrlKey || e.metaKey) {
+      switch (e.key) {
+        case 'b':
+          e.preventDefault();
+          applyFormat('bold');
+          break;
+        case 'i':
+          e.preventDefault();
+          applyFormat('italic');
+          break;
+        case 'u':
+          e.preventDefault();
+          applyFormat('underline');
+          break;
+        case 'z':
+          if (!e.shiftKey) {
+            e.preventDefault();
+            undo();
+          }
+          break;
+        case 'y':
+          e.preventDefault();
+          redo();
+          break;
+        default:
+          break;
+      }
+    }
+  };
+
+  // Fix for text color application
+  const applyTextColor = (colorValue) => {
+    // Use styleWithCSS for better color support
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('foreColor', false, colorValue);
+    editorRef.current.focus();
+    updateEditorState();
+    onChange(editorRef.current.innerHTML);
+  };
+
+  // Fix for list functionality
+  const applyList = (command) => {
+    // Ensure we're in a proper context for lists
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      let container = range.commonAncestorContainer;
+      
+      // If we're in a text node, move to parent
+      if (container.nodeType === Node.TEXT_NODE) {
+        container = container.parentNode;
+      }
+      
+      // Check if we're already in a list
+      const existingList = container.closest('ul, ol');
+      
+      if (existingList) {
+        // If we're in the opposite list type, switch types
+        if ((command === 'insertUnorderedList' && existingList.tagName === 'OL') ||
+            (command === 'insertOrderedList' && existingList.tagName === 'UL')) {
+          // Create new list of the desired type
+          const newList = document.createElement(command === 'insertUnorderedList' ? 'ul' : 'ol');
+          
+          // Copy all list items
+          while (existingList.firstChild) {
+            newList.appendChild(existingList.firstChild);
+          }
+          
+          // Replace the old list with the new one
+          existingList.parentNode.replaceChild(newList, existingList);
+        } else {
+          // Toggle list off if we're in the same list type
+          document.execCommand(command, false, null);
+        }
+      } else {
+        // Create new list
+        document.execCommand(command, false, null);
+      }
+    }
+    
+    editorRef.current.focus();
+    updateEditorState();
+    onChange(editorRef.current.innerHTML);
   };
 
   return (
@@ -195,6 +431,15 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       }`}
       onClick={(e) => e.stopPropagation()} 
     >
+      {/* Hidden file input for image upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImageUpload}
+        accept="image/*"
+        style={{ display: 'none' }}
+      />
+
       {/* Toolbar Header */}
       <div className={`flex justify-between items-center p-3 border-b ${darkMode ? 'border-gray-600' : 'border-gray-200'}`}>
         <div className="flex items-center gap-3">
@@ -231,18 +476,28 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
           {/* Undo/Redo */}
           <div className="flex border-r mr-2 pr-2">
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat('undo'))}
+              onClick={(e) => handleToolbarClick(e, undo)}
+              disabled={historyIndex <= 0}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                historyIndex <= 0 
+                  ? 'opacity-50 cursor-not-allowed text-gray-400' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Undo"
             >
               <FaUndo className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat('redo'))}
+              onClick={(e) => handleToolbarClick(e, redo)}
+              disabled={historyIndex >= history.length - 1}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                historyIndex >= history.length - 1
+                  ? 'opacity-50 cursor-not-allowed text-gray-400' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Redo"
             >
@@ -324,21 +579,29 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
             </button>
           </div>
 
-          {/* Lists */}
+          {/* Lists - FIXED */}
           <div className="flex border-r mr-2 pr-2">
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat("insertUnorderedList"))}
+              onClick={(e) => handleToolbarClick(e, () => applyList("insertUnorderedList"))}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                activeFormats.list 
+                  ? 'bg-blue-500 text-white' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Bullet List"
             >
               <FaListUl className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat("insertOrderedList"))}
+              onClick={(e) => handleToolbarClick(e, () => applyList("insertOrderedList"))}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                activeFormats.list 
+                  ? 'bg-blue-500 text-white' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Numbered List"
             >
@@ -371,7 +634,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
               <FaQuoteRight className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => handleToolbarClick(e, () => insertHTML('<code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px; font-family: monospace;">code</code>'))}
+              onClick={(e) => handleToolbarClick(e, () => insertHTML('<code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; border: 1px solid #e2e8f0;">code</code>'))}
               className={`p-2 rounded transition-all duration-200 ${
                 darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
@@ -393,13 +656,13 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
               <FaLink className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => handleToolbarClick(e, addImage)}
+              onClick={(e) => handleToolbarClick(e, triggerImageUpload)}
               className={`p-2 rounded transition-all duration-200 ${
                 darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
-              title="Insert Image"
+              title="Upload Image"
             >
-              <FaImage className="w-4 h-4" />
+              <FaUpload className="w-4 h-4" />
             </button>
             <button
               onClick={(e) => handleToolbarClick(e, addTable)}
@@ -412,7 +675,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
             </button>
           </div>
 
-          {/* Color Picker */}
+          {/* Color Picker - FIXED */}
           <div className="flex border-r mr-2 pr-2 relative">
             <button
               onClick={(e) => handleToolbarClick(e, () => setShowColorPicker(!showColorPicker))}
@@ -425,7 +688,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
             </button>
             {showColorPicker && (
               <div 
-                className={`absolute top-10 left-0 z-50 p-3 rounded-lg shadow-xl border ${
+                className={`absolute top-10 left-0 z-50 p-3 rounded-lg shadow-xl border min-w-32 ${
                   darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'
                 }`}
                 onClick={(e) => e.stopPropagation()}
@@ -436,7 +699,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
                       key={color.value}
                       onClick={(e) => {
                         e.stopPropagation();
-                        applyFormat('foreColor', color.value);
+                        applyTextColor(color.value);
                         setShowColorPicker(false);
                       }}
                       className="w-6 h-6 rounded border-2 border-gray-300 hover:scale-110 transition-transform"
@@ -445,7 +708,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
                     />
                   ))}
                 </div>
-                <div className="mt-2 text-xs text-center">
+                <div className={`mt-2 text-xs text-center ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   Text Color
                 </div>
               </div>
@@ -465,7 +728,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
             </button>
             {showFontSize && (
               <div 
-                className={`absolute top-10 left-0 z-50 p-3 rounded-lg shadow-xl border ${
+                className={`absolute top-10 left-0 z-50 p-2 rounded-lg shadow-xl border min-w-28 ${
                   darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'
                 }`}
                 onClick={(e) => e.stopPropagation()}
@@ -517,10 +780,20 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
             handleContentChange(e.currentTarget.innerHTML);
             updateEditorState();
           }}
+          onPaste={handlePaste}
           onKeyUp={updateEditorState}
+          onKeyDown={handleKeyDown}
           onClick={updateEditorState}
-          onFocus={() => editorRef.current.classList.add('ring-2', 'ring-blue-500')}
-          onBlur={() => editorRef.current.classList.remove('ring-2', 'ring-blue-500')}
+          onFocus={() => {
+            if (editorRef.current) {
+              editorRef.current.classList.add('ring-2', 'ring-blue-500');
+            }
+          }}
+          onBlur={() => {
+            if (editorRef.current) {
+              editorRef.current.classList.remove('ring-2', 'ring-blue-500');
+            }
+          }}
           className={`w-full min-h-64 max-h-96 p-6 outline-none text-base leading-relaxed overflow-y-auto transition-all duration-300 ${
             darkMode
               ? "bg-transparent text-white placeholder-gray-400"
@@ -529,13 +802,12 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
           style={{ 
             minHeight: '256px',
             textAlign: 'left',
-            direction: 'ltr',
-            unicodeBidi: 'embed'
+            direction: 'ltr'
           }}
         />
         
         {/* Floating Action Button */}
-        {!content && (
+        {(!content || content === '<br>' || content === '') && (
           <button
             onClick={(e) => handleToolbarClick(e, focusEditor)}
             className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-3 rounded-full font-semibold transition-all duration-300 hover:scale-105 shadow-lg ${
@@ -544,6 +816,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
                 : 'bg-gradient-to-r from-cyan-400 to-purple-500 text-white hover:from-cyan-500 hover:to-purple-600'
             }`}
           >
+            <FaFileImage className="inline w-5 h-5 mr-2" />
             Start Writing...
           </button>
         )}

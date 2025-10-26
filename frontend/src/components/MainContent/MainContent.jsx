@@ -29,7 +29,7 @@ const MainContent = ({
   fetchFolders,
 }) => {
   const [selectedFolder, setSelectedFolder] = useState(null);
-  const [currentView, setCurrentView] = useState('list');
+  const [isCreateNoteOpen, setIsCreateNoteOpen] = useState(false);
 
   const allNotes = useMemo(() => notes || [], [notes]);
   const allFolders = useMemo(() => folders || [], [folders]);
@@ -66,33 +66,33 @@ const MainContent = ({
 
   const handleFolderClick = (folder) => {
     setSelectedFolder(folder);
-    setCurrentView('list');
+    setIsCreateNoteOpen(false);
   };
 
   const handleNoteClick = (note) => {
     setSelectedNote(note);
-    setCurrentView('view');
+    setIsCreateNoteOpen(false);
   };
 
   const handleCreateNote = () => {
-    setCurrentView('create');
+    setIsCreateNoteOpen(true);
     setSelectedNote(null);
   };
 
   const handleEditNote = (note) => {
     setSelectedNote(note);
-    setCurrentView('edit');
+    setIsCreateNoteOpen(false);
   };
 
   const handleSaveNote = async (savedNote) => {
     try {
-      if (currentView === 'create') {
+      if (isCreateNoteOpen) {
         await onCreateNote(savedNote);
-      } else if (currentView === 'edit') {
+      } else {
         await onEditNote(savedNote);
       }
-      await fetchNotes(); 
-      setCurrentView('list');
+      await fetchNotes();
+      setIsCreateNoteOpen(false);
       setSelectedNote(null);
     } catch (error) {
       console.error('Error saving note:', error);
@@ -104,8 +104,7 @@ const MainContent = ({
     if (window.confirm('Are you sure you want to delete this note?')) {
       try {
         await onDeleteNote(noteId);
-        await fetchNotes(); 
-        setCurrentView('list');
+        await fetchNotes();
         setSelectedNote(null);
       } catch (error) {
         console.error('Error deleting note:', error);
@@ -115,18 +114,26 @@ const MainContent = ({
   };
 
   const handleCloseModal = () => {
-    setCurrentView('list');
+    setIsCreateNoteOpen(false);
     setSelectedNote(null);
   };
 
   return (
     <main
       className={`flex-1 p-2 md:p-6 overflow-y-auto theme-transition ${
-        darkMode
-          ? 'bg-[var(--bg-primary)]'
-          : 'bg-[var(--bg-primary)]'
+        darkMode ? 'bg-[var(--bg-primary-dark)]' : 'bg-[var(--bg-primary-light)]'
       }`}
-      style={{ '--bg-primary': darkMode ? 'linear-gradient(135deg, #1a202c, #2d3748)' : 'linear-gradient(135deg, #f7fafc, #e2e8f0)' }}
+      style={{
+        '--bg-primary-light': 'linear-gradient(135deg, #f9fafb, #e5e7eb)',
+        '--bg-primary-dark': 'linear-gradient(135deg, #111827, #1f2937)',
+        '--text-primary': darkMode ? '#f3f4f6' : '#1f2937',
+        '--text-secondary': darkMode ? '#9ca3af' : '#4b5563',
+        '--accent-primary': darkMode ? '#a5b4fc' : '#4f46e5',
+        '--accent-hover': darkMode ? '#c7d2fe' : '#4338ca',
+        '--card-bg': darkMode ? '#1f2937' : '#ffffff',
+        '--border-color': darkMode ? '#374151' : '#e5e7eb',
+        '--shadow': darkMode ? '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
+      }}
     >
       <style>
         {`
@@ -136,11 +143,12 @@ const MainContent = ({
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.6);
             display: flex;
             align-items: center;
             justify-content: center;
             animation: fadeIn 0.3s ease-in;
+            z-index: 1000;
           }
           .modal-content {
             max-width: 90%;
@@ -150,6 +158,7 @@ const MainContent = ({
             border-radius: 12px;
             box-shadow: var(--shadow);
             animation: slideIn 0.3s ease-in;
+            background: ${darkMode ? '#1f2937' : '#ffffff'};
           }
           @keyframes fadeIn {
             from { opacity: 0; }
@@ -163,7 +172,7 @@ const MainContent = ({
       </style>
 
       {/* Create Note Modal */}
-      {currentView === 'create' && (
+      {isCreateNoteOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
             <CreateNote
@@ -177,7 +186,7 @@ const MainContent = ({
       )}
 
       {/* Edit Note Modal */}
-      {currentView === 'edit' && selectedNote && (
+      {selectedNote && !isCreateNoteOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
             <EditNote
@@ -192,7 +201,7 @@ const MainContent = ({
       )}
 
       {/* Note View */}
-      {currentView === 'view' && selectedNote && (
+      {selectedNote && !isCreateNoteOpen && (
         <div className="flex flex-1">
           <div className="hidden lg:block lg:w-65">
             <NotesListPanel
@@ -216,7 +225,7 @@ const MainContent = ({
       )}
 
       {/* Main List View */}
-      {currentView === 'list' && (
+      {!selectedNote && !isCreateNoteOpen && (
         <>
           {selectedFolder ? (
             <div className="flex-1">
@@ -252,7 +261,7 @@ const MainContent = ({
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                   <button
                     onClick={onCreateFolder}
-                    className={`px-3 py-2 sm:px-4 rounded-lg font-medium transition-all text-sm sm:text-base bg-purple-500 text-white hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-700`}
+                    className={`px-3 py-2 sm:px-4 rounded-lg font-medium transition-all text-sm sm:text-base bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800`}
                     aria-label="Create new folder"
                   >
                     📁 <span className="hidden sm:inline">New Folder</span>
@@ -260,7 +269,7 @@ const MainContent = ({
                   </button>
                   <button
                     onClick={handleCreateNote}
-                    className="px-3 py-2 sm:px-4 rounded-lg font-medium text-white bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 transition-all text-sm sm:text-base"
+                    className="px-3 py-2 sm:px-4 rounded-lg font-medium text-white bg-gradient-to-r from-cyan-600 to-purple-700 hover:from-cyan-700 hover:to-purple-800 transition-all text-sm sm:text-base"
                     aria-label="Create new note"
                   >
                     + <span className="hidden sm:inline">New Note</span>
@@ -287,10 +296,10 @@ const MainContent = ({
                     ))}
                     <button
                       onClick={onCreateFolder}
-                      className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center hover:border-purple-500 transition-all duration-200 shadow-sm theme-transition bg-[var(--card-bg)]`}
+                      className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center hover:border-purple-600 transition-all duration-200 shadow-sm theme-transition bg-[var(--card-bg)]`}
                       aria-label="Create new folder"
                     >
-                      <svg className={`w-8 h-8 mb-2 text-purple-500 dark:text-purple-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className={`w-8 h-8 mb-2 text-purple-600 dark:text-purple-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
                       <span className={`font-medium text-[var(--text-primary)]`}>New Folder</span>
@@ -316,7 +325,7 @@ const MainContent = ({
                       >
                         {filter.charAt(0).toUpperCase() + filter.slice(1)}
                         {activeFilter === filter && (
-                          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-purple-600" />
+                          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-600 to-purple-700" />
                         )}
                       </button>
                     ))}
@@ -334,46 +343,15 @@ const MainContent = ({
                     ))}
                     <button
                       onClick={handleCreateNote}
-                      className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center hover:border-cyan-500 transition-all duration-200 shadow-sm theme-transition bg-[var(--card-bg)]`}
+                      className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center hover:border-cyan-600 transition-all duration-200 shadow-sm theme-transition bg-[var(--card-bg)]`}
                       aria-label="Create new note"
                     >
-                      <svg className={`w-8 h-8 mb-2 text-cyan-500 dark:text-cyan-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className={`w-8 h-8 mb-2 text-cyan-600 dark:text-cyan-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
                       <span className={`font-medium text-[var(--text-primary)]`}>New Note</span>
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* Empty States */}
-              {filteredNotes.length === 0 && (activeCategory === 'all' || activeCategory === 'notes') && (
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">📝</div>
-                  <h3 className={`text-lg font-medium mb-1 theme-transition text-[var(--text-primary)]`}>No notes found</h3>
-                  <p className={`text-sm theme-transition text-[var(--text-secondary)]`}>Try changing your search or create a new note</p>
-                  <button
-                    onClick={handleCreateNote}
-                    className="mt-4 px-6 py-2 bg-gradient-to-r from-cyan-500 to-purple-600 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-purple-700 transition-all"
-                    aria-label="Create new note"
-                  >
-                    Create Your First Note
-                  </button>
-                </div>
-              )}
-
-              {filteredFolders.length === 0 && (activeCategory === 'all' || activeCategory === 'folders') && (
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">📁</div>
-                  <h3 className={`text-lg font-medium mb-1 theme-transition text-[var(--text-primary)]`}>No folders found</h3>
-                  <p className={`text-sm theme-transition text-[var(--text-secondary)]`}>Create your first folder to organize your notes</p>
-                  <button
-                    onClick={onCreateFolder}
-                    className="mt-4 px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-pink-700 transition-all"
-                    aria-label="Create new folder"
-                  >
-                    Create Your First Folder
-                  </button>
                 </div>
               )}
             </>
