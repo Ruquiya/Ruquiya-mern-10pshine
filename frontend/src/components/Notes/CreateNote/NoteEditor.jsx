@@ -34,7 +34,9 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
     italic: false,
     underline: false,
     heading: false,
-    list: false
+    list: false,
+    blockquote: false,
+    alignment: 'left'
   });
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontSize, setShowFontSize] = useState(false);
@@ -98,46 +100,69 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       setCharCount(text.length);
  
       const selection = window.getSelection();
-      if (selection.rangeCount > 0 && selection.toString().length > 0) {
+      if (selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const node = range.startContainer.parentElement;
         
         // Check if we're in a list
         const inList = node.closest('ul, ol');
+        const inBlockquote = node.closest('blockquote');
+        const heading = node.tagName && node.tagName.match(/^H[1-6]$/i);
+        
+        // Check alignment
+        let alignment = 'left';
+        const computedStyle = window.getComputedStyle(node);
+        const textAlign = computedStyle.textAlign;
+        if (textAlign === 'center') alignment = 'center';
+        else if (textAlign === 'right') alignment = 'right';
+        else if (textAlign === 'justify') alignment = 'justify';
         
         setActiveFormats({
           bold: document.queryCommandState('bold'),
           italic: document.queryCommandState('italic'),
           underline: document.queryCommandState('underline'),
-          heading: node.tagName && node.tagName.match(/^H[1-6]$/i),
-          list: !!inList
-        });
-      } else {
-        // Reset formats when no selection
-        setActiveFormats({
-          bold: false,
-          italic: false,
-          underline: false,
-          heading: false,
-          list: false
+          heading: !!heading,
+          list: !!inList,
+          blockquote: !!inBlockquote,
+          alignment: alignment
         });
       }
     }
   };
 
   const applyFormat = (command, value = null) => {
+    if (!editorRef.current) return;
+    // Focus editor first
+    editorRef.current.focus();
+    
     // Save current selection
     const selection = window.getSelection();
     if (selection.rangeCount === 0) return;
 
-    // Apply the command
-    document.execCommand(command, false, value);
-    editorRef.current.focus();
-    updateEditorState();
-    onChange(editorRef.current.innerHTML);
+    try {
+      // Enable styleWithCSS for better formatting
+      document.execCommand("styleWithCSS", false, true);
+      
+      // Apply the command
+      const success = document.execCommand(command, false, value);
+      
+      if (!success) {
+        console.warn(`Command ${command} failed`);
+        // Fallback for some commands
+        if (command === 'formatBlock' && value) {
+          document.execCommand('formatBlock', false, value);
+        }
+      }
+      
+      updateEditorState();
+      onChange(editorRef.current.innerHTML);
+    } catch (error) {
+      console.error('Error applying format:', error);
+    }
   };
 
   const insertHTML = (html) => {
+    if (!editorRef.current) return;
     document.execCommand('insertHTML', false, html);
     editorRef.current.focus();
     updateEditorState();
@@ -147,16 +172,23 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
   const addLink = () => {
     const url = prompt('Enter URL:');
     if (url) {
-      // Check if URL has protocol, add https if not
       const formattedUrl = url.startsWith('http') ? url : `https://${url}`;
-      applyFormat('createLink', formattedUrl);
+      
+      // Check if there's selected text
+      const selection = window.getSelection();
+      if (selection.toString().trim() === '') {
+        // No text selected, insert link with URL as text
+        insertHTML(`<a href="${formattedUrl}" target="_blank" rel="noopener noreferrer">${formattedUrl}</a>`);
+      } else {
+        // Use selected text as link text
+        applyFormat('createLink', formattedUrl);
+      }
     }
   };
 
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
-      // Check if file is an image
       if (!file.type.match('image.*')) {
         alert('Please select an image file');
         return;
@@ -166,7 +198,6 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          // Calculate dimensions to maintain aspect ratio
           const maxWidth = 400;
           let width = img.width;
           let height = img.height;
@@ -183,7 +214,6 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       };
       reader.readAsDataURL(file);
       
-      // Reset file input
       event.target.value = '';
     }
   };
@@ -210,16 +240,15 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
   };
 
   const clearFormatting = () => {
-    // Save selection
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
       
-      // Remove formatting from selected text
+      // Remove formatting
       document.execCommand('removeFormat', false, null);
       document.execCommand('unlink', false, null);
       
-      // Also remove any font tags and spans with style
+      // Remove specific formatting that removeFormat might miss
       if (range.toString().length > 0) {
         const selectedHtml = range.cloneContents();
         const tempDiv = document.createElement('div');
@@ -229,6 +258,10 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
         tempDiv.querySelectorAll('*').forEach(el => {
           el.removeAttribute('style');
           el.removeAttribute('class');
+          el.removeAttribute('color');
+          el.removeAttribute('face');
+          el.removeAttribute('size');
+          
           if (el.tagName.toLowerCase() === 'font') {
             const parent = el.parentNode;
             while (el.firstChild) {
@@ -270,16 +303,14 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
   };
 
   const focusEditor = () => {
-    if (editorRef.current) {
-      editorRef.current.focus();
-      // Move cursor to end
-      const range = document.createRange();
-      range.selectNodeContents(editorRef.current);
-      range.collapse(false);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    const range = document.createRange();
+    range.selectNodeContents(editorRef.current);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
   };
 
   const sanitizeContent = (html) => {
@@ -311,11 +342,9 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
   const handleToolbarClick = (e, action) => {
     e.preventDefault();
     e.stopPropagation();
-    // Focus editor first to ensure commands work properly
     if (editorRef.current) {
       editorRef.current.focus();
     }
-    // Small delay to ensure focus is applied
     setTimeout(action, 10);
   };
 
@@ -328,7 +357,6 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
     // Insert text at cursor position
     document.execCommand('insertText', false, text);
     
-    // Update content
     setTimeout(() => {
       handleContentChange(editorRef.current.innerHTML);
       updateEditorState();
@@ -336,7 +364,6 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
   };
 
   const handleKeyDown = (e) => {
-    // Handle keyboard shortcuts
     if (e.ctrlKey || e.metaKey) {
       switch (e.key) {
         case 'b':
@@ -367,57 +394,137 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
     }
   };
 
-  // Fix for text color application
+  // Fixed text color application
   const applyTextColor = (colorValue) => {
-    // Use styleWithCSS for better color support
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    
+    // Use both methods for better browser compatibility
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('foreColor', false, colorValue);
-    editorRef.current.focus();
+    
+    // Alternative method using insertHTML for better reliability
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0 && selection.toString().length > 0) {
+      const range = selection.getRangeAt(0);
+      const selectedText = selection.toString();
+      
+      // Create span with color
+      const span = document.createElement('span');
+      span.style.color = colorValue;
+      span.textContent = selectedText;
+      
+      range.deleteContents();
+      range.insertNode(span);
+    }
+    
     updateEditorState();
     onChange(editorRef.current.innerHTML);
   };
 
-  // Fix for list functionality
+  // Fixed font size application
+  const applyFontSize = (sizeValue) => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    
+    // Use traditional font size command
+    document.execCommand('fontSize', false, sizeValue);
+    
+    // Fix the font tags that get created
+    const fontTags = editorRef.current.querySelectorAll('font');
+    fontTags.forEach(font => {
+      if (font.size === sizeValue) {
+        const span = document.createElement('span');
+        span.style.fontSize = getFontSizeFromValue(sizeValue);
+        while (font.firstChild) {
+          span.appendChild(font.firstChild);
+        }
+        font.parentNode.replaceChild(span, font);
+      }
+    });
+    
+    updateEditorState();
+    onChange(editorRef.current.innerHTML);
+  };
+
+  const getFontSizeFromValue = (value) => {
+    const sizes = {
+      '1': '0.75rem',
+      '2': '0.875rem',
+      '3': '1rem',
+      '4': '1.125rem',
+      '5': '1.25rem',
+      '6': '1.5rem',
+      '7': '2rem'
+    };
+    return sizes[value] || '1rem';
+  };
+
+  // Fixed list functionality
   const applyList = (command) => {
-    // Ensure we're in a proper context for lists
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    
+    // Simple execCommand for lists - browsers handle this well
+    document.execCommand(command, false, null);
+    
+    updateEditorState();
+    onChange(editorRef.current.innerHTML);
+  };
+
+  // Fixed heading functionality
+  const applyHeading = () => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
-      let container = range.commonAncestorContainer;
+      const node = range.startContainer.parentElement;
       
-      // If we're in a text node, move to parent
-      if (container.nodeType === Node.TEXT_NODE) {
-        container = container.parentNode;
-      }
-      
-      // Check if we're already in a list
-      const existingList = container.closest('ul, ol');
-      
-      if (existingList) {
-        // If we're in the opposite list type, switch types
-        if ((command === 'insertUnorderedList' && existingList.tagName === 'OL') ||
-            (command === 'insertOrderedList' && existingList.tagName === 'UL')) {
-          // Create new list of the desired type
-          const newList = document.createElement(command === 'insertUnorderedList' ? 'ul' : 'ol');
-          
-          // Copy all list items
-          while (existingList.firstChild) {
-            newList.appendChild(existingList.firstChild);
-          }
-          
-          // Replace the old list with the new one
-          existingList.parentNode.replaceChild(newList, existingList);
-        } else {
-          // Toggle list off if we're in the same list type
-          document.execCommand(command, false, null);
-        }
+      // Check if already a heading
+      if (node.tagName && node.tagName.match(/^H[1-6]$/i)) {
+        // Convert back to normal paragraph
+        document.execCommand('formatBlock', false, '<p>');
       } else {
-        // Create new list
-        document.execCommand(command, false, null);
+        // Apply heading
+        document.execCommand('formatBlock', false, '<h3>');
       }
     }
     
+    updateEditorState();
+    onChange(editorRef.current.innerHTML);
+  };
+
+  // Fixed blockquote functionality
+  const applyBlockquote = () => {
+    if (!editorRef.current) return;
     editorRef.current.focus();
+    
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const node = range.startContainer.parentElement;
+      
+      // Check if already in blockquote
+      if (node.closest('blockquote')) {
+        // Remove blockquote
+        document.execCommand('formatBlock', false, '<p>');
+      } else {
+        // Apply blockquote
+        document.execCommand('formatBlock', false, '<blockquote>');
+      }
+    }
+    
+    updateEditorState();
+    onChange(editorRef.current.innerHTML);
+  };
+
+  // Fixed alignment functionality
+  const applyAlignment = (alignment) => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    document.execCommand('justify' + alignment.charAt(0).toUpperCase() + alignment.slice(1));
     updateEditorState();
     onChange(editorRef.current.innerHTML);
   };
@@ -551,27 +658,39 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
           {/* Alignment */}
           <div className="flex border-r mr-2 pr-2">
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat("justifyLeft"))}
+              onClick={(e) => handleToolbarClick(e, () => applyAlignment("left"))}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                activeFormats.alignment === 'left' 
+                  ? 'bg-blue-500 text-white' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Align Left"
             >
               <FaAlignLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat("justifyCenter"))}
+              onClick={(e) => handleToolbarClick(e, () => applyAlignment("center"))}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                activeFormats.alignment === 'center' 
+                  ? 'bg-blue-500 text-white' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Align Center"
             >
               <FaAlignCenter className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat("justifyRight"))}
+              onClick={(e) => handleToolbarClick(e, () => applyAlignment("right"))}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                activeFormats.alignment === 'right' 
+                  ? 'bg-blue-500 text-white' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Align Right"
             >
@@ -609,10 +728,10 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
             </button>
           </div>
 
-          {/* Headings & Blocks */}
+          {/* Headings & Blocks - FIXED */}
           <div className="flex border-r mr-2 pr-2">
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat("formatBlock", "<h3>"))}
+              onClick={(e) => handleToolbarClick(e, applyHeading)}
               className={`p-2 rounded transition-all duration-200 ${
                 activeFormats.heading 
                   ? 'bg-blue-500 text-white' 
@@ -625,9 +744,13 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
               <FaHeading className="w-4 h-4" />
             </button>
             <button
-              onClick={(e) => handleToolbarClick(e, () => applyFormat("formatBlock", "<blockquote>"))}
+              onClick={(e) => handleToolbarClick(e, applyBlockquote)}
               className={`p-2 rounded transition-all duration-200 ${
-                darkMode ? 'text-gray-300 hover:bg-gray-600 hover:text-white' : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                activeFormats.blockquote 
+                  ? 'bg-blue-500 text-white' 
+                  : darkMode 
+                    ? 'text-gray-300 hover:bg-gray-600 hover:text-white' 
+                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
               }`}
               title="Blockquote"
             >
@@ -715,7 +838,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
             )}
           </div>
 
-          {/* Font Size */}
+          {/* Font Size - FIXED */}
           <div className="flex relative">
             <button
               onClick={(e) => handleToolbarClick(e, () => setShowFontSize(!showFontSize))}
@@ -739,7 +862,7 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
                       key={size.value}
                       onClick={(e) => {
                         e.stopPropagation();
-                        applyFormat('fontSize', size.value);
+                        applyFontSize(size.value);
                         setShowFontSize(false);
                       }}
                       className={`block w-full text-left px-2 py-1 rounded text-sm hover:bg-blue-500 hover:text-white transition-all ${
@@ -775,6 +898,9 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
         <div
           ref={editorRef}
           contentEditable
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Rich Text Editor"
           suppressContentEditableWarning={true}
           onInput={(e) => {
             handleContentChange(e.currentTarget.innerHTML);

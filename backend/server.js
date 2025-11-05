@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
@@ -9,8 +10,12 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-dotenv.config();
-connectDB();
+// Load env vars based on environment
+if (process.env.NODE_ENV === 'test') {
+  dotenv.config({ path: '.env.test' });
+} else {
+  dotenv.config();
+}
 
 const app = express();
 
@@ -114,5 +119,18 @@ app.use('*', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Only start the server if this file is run directly (not in tests)
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  
+  // Connect to database and start server
+  connectDB().then(() => {
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+  }).catch(err => {
+    console.error('❌ Database connection failed:', err);
+    process.exit(1);
+  });
+}
+
+// Export the app for testing
+module.exports = app;

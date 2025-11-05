@@ -20,7 +20,7 @@ export default function Login({ onLogin }) {
   useEffect(() => {
     const savedEmail = localStorage.getItem('savedEmail')
     const savedRememberMe = localStorage.getItem('rememberMe') === 'true'
-    
+
     if (savedEmail && savedRememberMe) {
       setFormData(prev => ({ ...prev, email: savedEmail }))
       setRememberMe(true)
@@ -33,7 +33,7 @@ export default function Login({ onLogin }) {
     }
     handleResize()
     window.addEventListener('resize', handleResize)
-    
+
     const style = document.createElement('style')
     style.textContent = `
       @keyframes float {
@@ -120,7 +120,7 @@ export default function Login({ onLogin }) {
   const handleRememberMeChange = (e) => {
     const isChecked = e.target.checked
     setRememberMe(isChecked)
-    
+
     if (!isChecked) {
       localStorage.removeItem('savedEmail')
       localStorage.removeItem('rememberMe')
@@ -138,7 +138,7 @@ export default function Login({ onLogin }) {
         return false
       }
     }
-    
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.email)) {
       setError('Please enter a valid email address')
@@ -191,7 +191,7 @@ export default function Login({ onLogin }) {
         })
       } else {
         response = await api.register({
-          name: formData.name, 
+          name: formData.name,
           email: formData.email,
           password: formData.password,
           confirmPassword: formData.confirmPassword
@@ -207,7 +207,7 @@ export default function Login({ onLogin }) {
           localStorage.setItem('savedEmail', formData.email)
           localStorage.setItem('rememberMe', 'true')
         }
-        onLogin()
+        onLogin() // This triggers the navigation to dashboard
       }
     } catch (error) {
       console.error('API Error:', error)
@@ -216,6 +216,32 @@ export default function Login({ onLogin }) {
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      const token = localStorage.getItem('token')
+      const user = localStorage.getItem('user')
+
+      if (token && user) {
+        try {
+
+          const response = await api.validateToken(token)
+          if (response.valid) {
+            setIsLoggedIn(true)
+          } else {
+            // Token is invalid, clear storage
+            handleLogout()
+          }
+        } catch (error) {
+          // Network error or invalid token
+          handleLogout()
+        }
+      }
+      setIsCheckingAuth(false)
+    }
+
+    checkAuthStatus()
+  }, [])
 
   const handleToggle = (login) => {
     setIsLogin(login)
@@ -279,7 +305,7 @@ export default function Login({ onLogin }) {
               Cognify
             </h1>
           </div>
-          
+
           <h2 className="text-2xl font-extrabold text-white mb-2 sm:text-xl">
             {isLogin ? 'Welcome Back!' : 'Create Your Account'}
           </h2>
@@ -293,22 +319,20 @@ export default function Login({ onLogin }) {
           <div className="bg-gray-800/60 rounded-xl p-1 flex border border-white/10">
             <button
               onClick={() => handleToggle(true)}
-              className={`px-6 py-2 rounded-xl font-semibold transition-all duration-300 min-w-[100px] text-sm sm:min-w-[80px] sm:text-xs ${
-                isLogin
+              className={`px-6 py-2 rounded-xl font-semibold transition-all duration-300 min-w-[100px] text-sm sm:min-w-[80px] sm:text-xs ${isLogin
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg transform scale-105'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
+                }`}
               aria-label="Switch to login"
             >
               Login
             </button>
             <button
               onClick={() => handleToggle(false)}
-              className={`px-6 py-2 rounded-xl font-semibold transition-all duration-300 min-w-[100px] text-sm sm:min-w-[80px] sm:text-xs ${
-                !isLogin
+              className={`px-6 py-2 rounded-xl font-semibold transition-all duration-300 min-w-[100px] text-sm sm:min-w-[80px] sm:text-xs ${!isLogin
                   ? 'bg-gradient-to-r from-purple-500 to-fuchsia-600 text-white shadow-lg transform scale-105'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
+                }`}
               aria-label="Switch to sign up"
             >
               Sign Up
@@ -346,7 +370,7 @@ export default function Login({ onLogin }) {
                 <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-xl blur opacity-0 group-hover:opacity-20 transition-opacity duration-300 -z-10"></div>
               </div>
             )}
-            
+
             <div className="relative group">
               <input
                 type="email"
@@ -360,7 +384,7 @@ export default function Login({ onLogin }) {
               />
               <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-xl blur opacity-0 group-hover:opacity-20 transition-opacity duration-300 -z-10"></div>
             </div>
-            
+
             <div className="relative group">
               <input
                 type="password"
@@ -403,17 +427,15 @@ export default function Login({ onLogin }) {
                     onChange={handleRememberMeChange}
                     aria-label="Remember me"
                   />
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-300 hover:border-cyan-500 sm:w-3 sm:h-3 ${
-                    rememberMe 
-                      ? 'bg-cyan-500 border-cyan-500' 
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-300 hover:border-cyan-500 sm:w-3 sm:h-3 ${rememberMe
+                      ? 'bg-cyan-500 border-cyan-500'
                       : 'bg-gray-700 border-gray-600'
-                  }`}>
-                    <svg 
-                      className={`w-2 h-2 text-white transition-opacity duration-200 sm:w-1.5 sm:h-1.5 ${
-                        rememberMe ? 'opacity-100' : 'opacity-0'
-                      }`} 
-                      fill="none" 
-                      viewBox="0 0 24 24" 
+                    }`}>
+                    <svg
+                      className={`w-2 h-2 text-white transition-opacity duration-200 sm:w-1.5 sm:h-1.5 ${rememberMe ? 'opacity-100' : 'opacity-0'
+                        }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
                       stroke="currentColor"
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -422,7 +444,7 @@ export default function Login({ onLogin }) {
                 </div>
                 <span className="text-gray-300 text-sm sm:text-xs">Remember me</span>
               </label>
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowForgotPassword(true)}
                 className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors duration-300 font-medium sm:text-xs"
@@ -465,7 +487,7 @@ export default function Login({ onLogin }) {
             <p className="text-gray-300 text-sm mb-4">
               Enter your email address and we'll send you a link to reset your password.
             </p>
-            
+
             <form onSubmit={handleForgotPassword} className="space-y-4">
               <div>
                 <input
@@ -477,11 +499,11 @@ export default function Login({ onLogin }) {
                   required
                 />
               </div>
-              
+
               {error && (
                 <div className="text-red-400 text-sm">{error}</div>
               )}
-              
+
               <div className="flex gap-3">
                 <button
                   type="button"

@@ -30,6 +30,7 @@ const MainContent = ({
 }) => {
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [isCreateNoteOpen, setIsCreateNoteOpen] = useState(false);
+  const [isEditNoteOpen, setIsEditNoteOpen] = useState(false);
 
   const allNotes = useMemo(() => notes || [], [notes]);
   const allFolders = useMemo(() => folders || [], [folders]);
@@ -67,20 +68,25 @@ const MainContent = ({
   const handleFolderClick = (folder) => {
     setSelectedFolder(folder);
     setIsCreateNoteOpen(false);
+    setIsEditNoteOpen(false);
+    setSelectedNote(null);
   };
 
   const handleNoteClick = (note) => {
     setSelectedNote(note);
     setIsCreateNoteOpen(false);
+    setIsEditNoteOpen(false);
   };
 
   const handleCreateNote = () => {
     setIsCreateNoteOpen(true);
+    setIsEditNoteOpen(false);
     setSelectedNote(null);
   };
 
-  const handleEditNote = (note) => {
+  const handleEditNoteClick = (note) => {
     setSelectedNote(note);
+    setIsEditNoteOpen(true);
     setIsCreateNoteOpen(false);
   };
 
@@ -88,11 +94,12 @@ const MainContent = ({
     try {
       if (isCreateNoteOpen) {
         await onCreateNote(savedNote);
-      } else {
+      } else if (isEditNoteOpen) {
         await onEditNote(savedNote);
       }
       await fetchNotes();
       setIsCreateNoteOpen(false);
+      setIsEditNoteOpen(false);
       setSelectedNote(null);
     } catch (error) {
       console.error('Error saving note:', error);
@@ -106,6 +113,7 @@ const MainContent = ({
         await onDeleteNote(noteId);
         await fetchNotes();
         setSelectedNote(null);
+        setIsEditNoteOpen(false);
       } catch (error) {
         console.error('Error deleting note:', error);
         alert('Failed to delete note. Please try again.');
@@ -115,7 +123,13 @@ const MainContent = ({
 
   const handleCloseModal = () => {
     setIsCreateNoteOpen(false);
+    setIsEditNoteOpen(false);
     setSelectedNote(null);
+  };
+
+  const handleBackFromNoteView = () => {
+    setSelectedNote(null);
+    setIsEditNoteOpen(false);
   };
 
   return (
@@ -185,8 +199,8 @@ const MainContent = ({
         </div>
       )}
 
-      {/* Edit Note Modal */}
-      {selectedNote && !isCreateNoteOpen && (
+      {/* Edit Note Modal - Only show when explicitly editing */}
+      {isEditNoteOpen && selectedNote && (
         <div className="modal-overlay">
           <div className="modal-content">
             <EditNote
@@ -200,8 +214,8 @@ const MainContent = ({
         </div>
       )}
 
-      {/* Note View */}
-      {selectedNote && !isCreateNoteOpen && (
+      {/* Note View - Show when viewing a note (not editing) */}
+      {selectedNote && !isCreateNoteOpen && !isEditNoteOpen && (
         <div className="flex flex-1">
           <div className="hidden lg:block lg:w-65">
             <NotesListPanel
@@ -214,10 +228,10 @@ const MainContent = ({
           <div className="flex-1">
             <NoteView
               note={selectedNote}
-              onBack={handleCloseModal}
+              onBack={handleBackFromNoteView}
               darkMode={darkMode}
               allNotes={allNotes}
-              onEdit={handleEditNote}
+              onEdit={handleEditNoteClick}
               onDelete={handleDeleteNote}
             />
           </div>
@@ -225,7 +239,7 @@ const MainContent = ({
       )}
 
       {/* Main List View */}
-      {!selectedNote && !isCreateNoteOpen && (
+      {!selectedNote && !isCreateNoteOpen && !isEditNoteOpen && (
         <>
           {selectedFolder ? (
             <div className="flex-1">
