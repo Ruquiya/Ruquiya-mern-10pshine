@@ -3,24 +3,25 @@ const API_URL = 'http://localhost:5000/api';
 const api = {
   async request(endpoint, options = {}) {
     const url = `${API_URL}${endpoint}`;
+    
+    // Handle FormData (for file uploads)
+    const isFormData = options.body instanceof FormData;
     const config = {
       headers: {
-        'Content-Type': 'application/json',
+        ...(!isFormData && { 'Content-Type': 'application/json' }),
         ...options.headers,
       },
       ...options,
     };
 
-    if (config.body) {
+    if (config.body && !isFormData) {
       config.body = JSON.stringify(config.body);
     }
 
     try {
       const response = await fetch(url, config);
       
-      // Check if response is OK
       if (!response.ok) {
-        // Try to parse error message from response
         let errorMessage = 'Something went wrong';
         try {
           const errorData = await response.json();
@@ -34,7 +35,6 @@ const api = {
       const data = await response.json();
       return data;
     } catch (error) {
-      // Handle network errors
       if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
         throw new Error('Network error: Unable to connect to server. Please check if the backend is running.');
       }
@@ -64,30 +64,43 @@ const api = {
       },
     });
   },
-};
 
-updateProfile: async (userData) => {
-  try {
-    const token = localStorage.getItem('token');
-    const response = await fetch('/api/auth/profile', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(userData)
-    });
+  async updateProfile(userData) {
+    try {
+      const token = localStorage.getItem('token');
+      const isFormData = userData instanceof FormData;
+      
+      const response = await this.request('/auth/profile', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          ...(isFormData ? {} : { 'Content-Type': 'application/json' })
+        },
+        body: userData
+      });
 
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.message || 'Failed to update profile');
+      return response;
+    } catch (error) {
+      throw error;
     }
+  },
 
-    return data;
-  } catch (error) {
-    throw error;
+  async uploadProfileImage(formData) {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await this.request('/auth/upload-profile-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData
+      });
+
+      return response;
+    } catch (error) {
+      throw error;
+    }
   }
-}
+};
 
 export default api;

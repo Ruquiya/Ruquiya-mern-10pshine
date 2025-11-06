@@ -4,10 +4,18 @@ const AudioRecorder = ({ content, onChange, darkMode }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [audioURL, setAudioURL] = useState(content || '');
   const [recordingTime, setRecordingTime] = useState(0);
+  const [isSupported, setIsSupported] = useState(true); // Track codec support
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Check if the browser supports WebM/Opus
+  useEffect(() => {
+    const audio = new Audio();
+    const isWebMSupported = !!audio.canPlayType('audio/webm;codecs=opus');
+    setIsSupported(isWebMSupported);
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -19,10 +27,10 @@ const AudioRecorder = ({ content, onChange, darkMode }) => {
         } 
       });
       streamRef.current = stream;
-      
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+
+      // Try WebM first, fallback to other formats if unsupported
+      const mimeType = isSupported ? 'audio/webm;codecs=opus' : 'audio/mp3';
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -34,7 +42,7 @@ const AudioRecorder = ({ content, onChange, darkMode }) => {
 
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { 
-          type: 'audio/webm;codecs=opus' 
+          type: mimeType 
         });
         
         // Convert to base64 data URL
@@ -136,8 +144,12 @@ const AudioRecorder = ({ content, onChange, darkMode }) => {
           <div className="space-y-4">
             <div className="text-6xl text-green-500">✅</div>
             <audio controls className="w-full max-w-md mx-auto">
-              <source src={audioURL} type="audio/webm" />
-              Your browser does not support the audio element.
+              <source src={audioURL} type={isSupported ? 'audio/webm' : 'audio/mp3'} />
+              {!isSupported && (
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Your browser does not support WebM audio. Try a different browser or format.
+                </p>
+              )}
             </audio>
             <div className="flex gap-3 justify-center">
               <button
@@ -183,6 +195,7 @@ const AudioRecorder = ({ content, onChange, darkMode }) => {
       {/* Instructions */}
       <div className={`p-3 border-t ${darkMode ? 'border-gray-600 text-gray-400' : 'border-gray-200 text-gray-500'} text-xs`}>
         💡 Make sure you allow microphone access. Recording quality may vary based on your device.
+        {!isSupported && ' For best results, use a browser that supports WebM audio (e.g., Chrome, Firefox).'}
       </div>
     </div>
   );

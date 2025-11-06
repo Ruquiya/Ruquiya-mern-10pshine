@@ -14,11 +14,37 @@ const Header = ({
   const [user, setUser] = useState(null);
   const dropdownRef = useRef(null);
 
+  // Listen for storage changes to update user data in real-time
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
+    const loadUserData = () => {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
+    };
+
+    // Load initial data
+    loadUserData();
+
+    // Listen for storage changes (when profile is updated)
+    const handleStorageChange = (e) => {
+      if (e.key === 'user') {
+        loadUserData();
+      }
+    };
+
+    // Listen for custom event (when profile is updated via modal)
+    const handleProfileUpdate = () => {
+      loadUserData();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
   }, []);
 
   useEffect(() => {
@@ -54,6 +80,22 @@ const Header = ({
       return user.name.charAt(0).toUpperCase();
     }
     return 'U';
+  };
+
+  const getProfileImageUrl = (profilePicture) => {
+    if (!profilePicture) return null;
+    
+    // If it's already a full URL, return as is
+    if (profilePicture.startsWith('http')) {
+      return profilePicture;
+    }
+    
+    // If it's a local path, construct the full URL
+    if (profilePicture.startsWith('/uploads/')) {
+      return `http://localhost:5000${profilePicture}`;
+    }
+    
+    return profilePicture;
   };
 
   return (
@@ -135,12 +177,26 @@ const Header = ({
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-              className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold theme-transition hover:scale-105 transition-transform ${
-                darkMode ? 'bg-cyan-500 text-white hover:bg-cyan-600' : 'bg-cyan-100 text-cyan-600 hover:bg-cyan-200'
+              className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold theme-transition hover:scale-105 transition-transform overflow-hidden ${
+                darkMode 
+                  ? user?.profilePicture ? '' : 'bg-cyan-500 text-white hover:bg-cyan-600'
+                  : user?.profilePicture ? '' : 'bg-cyan-100 text-cyan-600 hover:bg-cyan-200'
               }`}
               title="User Profile"
             >
-              {getUserInitial()}
+              {user?.profilePicture ? (
+                <img 
+                  src={getProfileImageUrl(user.profilePicture)} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // If image fails to load, show initial instead
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                getUserInitial()
+              )}
             </button>
 
             {/* Profile Dropdown */}
@@ -150,21 +206,43 @@ const Header = ({
                   ? 'bg-gray-800 border-gray-700' 
                   : 'bg-white border-gray-200'
               }`}>
-                {/* User Info */}
+                {/* User Info with Profile Image */}
                 {user && (
                   <div className={`px-4 py-3 border-b ${
                     darkMode ? 'border-gray-700' : 'border-gray-200'
                   }`}>
-                    <p className={`text-sm font-medium ${
-                      darkMode ? 'text-white' : 'text-gray-900'
-                    }`}>
-                      {user.name}
-                    </p>
-                    <p className={`text-sm ${
-                      darkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
-                      {user.email}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold overflow-hidden ${
+                        darkMode 
+                          ? user.profilePicture ? '' : 'bg-cyan-500 text-white'
+                          : user.profilePicture ? '' : 'bg-cyan-100 text-cyan-600'
+                      }`}>
+                        {user.profilePicture ? (
+                          <img 
+                            src={getProfileImageUrl(user.profilePicture)} 
+                            alt="Profile" 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          getUserInitial()
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${
+                          darkMode ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          {user.name || 'User'}
+                        </p>
+                        <p className={`text-sm truncate ${
+                          darkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
+                          {user.email}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
                 
