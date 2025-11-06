@@ -1,0 +1,6 @@
+projectKey=ruquiya-mern
+serverUrl=http://localhost:9000
+serverVersion=25.10.0.114319
+dashboardUrl=http://localhost:9000/dashboard?id=ruquiya-mern
+ceTaskId=3f704e34-1a97-4823-98ea-a231e11d5af5
+ceTaskUrl=http://localhost:9000/api/ce/task?id=3f704e34-1a97-4823-98ea-a231e11d5af5
