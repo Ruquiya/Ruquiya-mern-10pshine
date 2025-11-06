@@ -287,6 +287,8 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       if (editorRef.current) {
         editorRef.current.innerHTML = history[newIndex];
         updateEditorState();
+        // Propagate undone content to parent so Save uses the undone state
+        handleContentChange(editorRef.current.innerHTML);
       }
     }
   };
@@ -298,6 +300,8 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
       if (editorRef.current) {
         editorRef.current.innerHTML = history[newIndex];
         updateEditorState();
+        // Propagate redone content to parent so Save uses the redone state
+        handleContentChange(editorRef.current.innerHTML);
       }
     }
   };
@@ -317,11 +321,17 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
     if (!html) return '';
 
     let sanitized = html
-      .replace(/style="[^"]*direction:\s*rtl[^"]*"/gi, '')
-      .replace(/style="[^"]*unicode-bidi:[^"]*"/gi, '')
+      // Remove any inline styles entirely
+      .replace(/\sstyle="[^"]*"/gi, '')
+      // Remove deprecated align attributes
+      .replace(/\salign="[^"]*"/gi, '')
+      // Normalize nbsp
       .replace(/&nbsp;/g, ' ')
+      // Remove data URL images from pasted content
+      .replace(/<img[^>]*src=['"]data:[^'"]+['"][^>]*>/gi, '')
+      // Convert divs to line breaks
       .replace(/<div><br><\/div>/gi, '<br>')
-      .replace(/<div>/gi, '<br>')
+      .replace(/<div[^>]*>/gi, '<br>')
       .replace(/<\/div>/gi, '');
 
     return sanitized;
@@ -329,7 +339,8 @@ const TextNoteEditor = ({ content, onChange, darkMode }) => {
 
   useEffect(() => {
     if (editorRef.current && content !== undefined && content !== editorRef.current.innerHTML) {
-      editorRef.current.innerHTML = content || '';
+      const sanitized = sanitizeContent(content || '');
+      editorRef.current.innerHTML = sanitized;
       updateEditorState();
     }
   }, [content]);

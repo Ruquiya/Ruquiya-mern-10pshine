@@ -1,9 +1,9 @@
 const Note = require('../models/Note');
+const logger = require('../utils/logger');
 
 exports.createNote = async (req, res) => {
   try {
-    console.log(' Create note request:', req.body);
-    console.log('User ID:', req.user.id);
+    req.log && req.log.info({ bodyKeys: Object.keys(req.body || {}), userId: req.user.id }, 'Create note request');
     
     const note = new Note({
       title: req.body.title,
@@ -24,7 +24,7 @@ exports.createNote = async (req, res) => {
 
     await note.save();
     
-    console.log('Note created successfully:', note._id);
+    req.log && req.log.info({ noteId: note._id }, 'Note created successfully');
     
     res.status(201).json({
       success: true,
@@ -32,7 +32,7 @@ exports.createNote = async (req, res) => {
       message: 'Note created successfully'
     });
   } catch (err) {
-    console.error(' Create note error:', err.message);
+    (req.log || logger).error({ err, userId: req.user?.id }, 'Create note error');
     res.status(500).json({ 
       success: false, 
       message: 'Server error: ' + err.message 
@@ -43,7 +43,7 @@ exports.createNote = async (req, res) => {
 
 exports.getNotes = async (req, res) => {
   try {
-    console.log('👤 Fetching notes for user:', req.user.id);
+    req.log && req.log.info({ userId: req.user.id, category: req.query.category }, 'Fetching notes for user');
     const { category } = req.query;
     let query = { user: req.user.id };
     
@@ -56,7 +56,7 @@ exports.getNotes = async (req, res) => {
     
     const notes = await Note.find(query).sort({ createdAt: -1 });
     
-    console.log(` Found ${notes.length} notes for user (category: ${category || 'all'})`);
+    req.log && req.log.info({ count: notes.length, category: category || 'all' }, 'Fetched notes');
     
     res.json({
       success: true,
@@ -64,7 +64,7 @@ exports.getNotes = async (req, res) => {
       count: notes.length
     });
   } catch (err) {
-    console.error(' Get notes error:', err.message);
+    (req.log || logger).error({ err, userId: req.user?.id }, 'Get notes error');
     res.status(500).json({ 
       success: false, 
       message: 'Server error: ' + err.message 
@@ -74,7 +74,7 @@ exports.getNotes = async (req, res) => {
 
 exports.getNote = async (req, res) => {
   try {
-    console.log(' Getting note:', req.params.id, 'for user:', req.user.id);
+    req.log && req.log.info({ noteId: req.params.id, userId: req.user.id }, 'Getting note');
     
     if (!req.params.id || req.params.id.length < 10) {
       return res.status(400).json({ 
@@ -86,21 +86,21 @@ exports.getNote = async (req, res) => {
     const note = await Note.findOne({ _id: req.params.id, user: req.user.id });
     
     if (!note) {
-      console.log(' Note not found:', req.params.id);
+      req.log && req.log.warn({ noteId: req.params.id }, 'Note not found');
       return res.status(404).json({ 
         success: false, 
         message: 'Note not found' 
       });
     }
     
-    console.log(' Note found:', note._id);
+    req.log && req.log.info({ noteId: note._id }, 'Note found');
     
     res.json({
       success: true,
       data: note
     });
   } catch (err) {
-    console.error('Get note error:', err.message);
+    (req.log || logger).error({ err, userId: req.user?.id, noteId: req.params?.id }, 'Get note error');
     
     if (err.name === 'CastError') {
       return res.status(400).json({ 
@@ -118,7 +118,7 @@ exports.getNote = async (req, res) => {
 
 exports.updateNote = async (req, res) => {
   try {
-    console.log(' Updating note:', req.params.id, 'for user:', req.user.id);
+    req.log && req.log.info({ noteId: req.params.id, userId: req.user.id }, 'Updating note');
     
     if (!req.params.id || req.params.id.length < 10) {
       return res.status(400).json({ 
@@ -134,14 +134,14 @@ exports.updateNote = async (req, res) => {
     );
     
     if (!note) {
-      console.log(' Note not found for update:', req.params.id);
+      req.log && req.log.warn({ noteId: req.params.id }, 'Note not found for update');
       return res.status(404).json({ 
         success: false, 
         message: 'Note not found' 
       });
     }
     
-    console.log(' Note updated successfully:', note._id);
+    req.log && req.log.info({ noteId: note._id }, 'Note updated successfully');
     
     res.json({
       success: true,
@@ -149,7 +149,7 @@ exports.updateNote = async (req, res) => {
       message: 'Note updated successfully'
     });
   } catch (err) {
-    console.error(' Update note error:', err.message);
+    (req.log || logger).error({ err, userId: req.user?.id, noteId: req.params?.id }, 'Update note error');
     
     if (err.name === 'CastError') {
       return res.status(400).json({ 
@@ -167,7 +167,7 @@ exports.updateNote = async (req, res) => {
 
 exports.deleteNote = async (req, res) => {
   try {
-    console.log('Deleting note:', req.params.id, 'for user:', req.user.id);
+    req.log && req.log.info({ noteId: req.params.id, userId: req.user.id }, 'Deleting note');
     
     if (!req.params.id || req.params.id.length < 10) {
       return res.status(400).json({ 
@@ -186,14 +186,14 @@ exports.deleteNote = async (req, res) => {
     );
     
     if (!note) {
-      console.log(' Note not found for deletion:', req.params.id);
+      req.log && req.log.warn({ noteId: req.params.id }, 'Note not found for deletion');
       return res.status(404).json({ 
         success: false, 
         message: 'Note not found' 
       });
     }
     
-    console.log(' Note moved to trash successfully:', req.params.id);
+    req.log && req.log.info({ noteId: req.params.id }, 'Note moved to trash successfully');
     
     res.json({ 
       success: true, 
@@ -201,7 +201,7 @@ exports.deleteNote = async (req, res) => {
       deletedNoteId: req.params.id
     });
   } catch (err) {
-    console.error(' Delete note error:', err.message);
+    (req.log || logger).error({ err, userId: req.user?.id, noteId: req.params?.id }, 'Delete note error');
     
     if (err.name === 'CastError') {
       return res.status(400).json({ 
@@ -231,12 +231,13 @@ exports.restoreNote = async (req, res) => {
       success: false, 
       message: 'Note not found' 
     });
+    req.log && req.log.info({ noteId: req.params.id }, 'Note restored successfully');
     res.json({ 
       success: true, 
       message: 'Note restored successfully' 
     });
   } catch (err) {
-    console.error(err.message);
+    (req.log || logger).error({ err, userId: req.user?.id, noteId: req.params?.id }, 'Restore note error');
     res.status(500).json({ 
       success: false, 
       message: 'Server error: ' + err.message 
@@ -251,12 +252,13 @@ exports.permanentDeleteNote = async (req, res) => {
       success: false, 
       message: 'Note not found' 
     });
+    req.log && req.log.info({ noteId: req.params.id }, 'Note permanently deleted');
     res.json({ 
       success: true, 
       message: 'Note permanently deleted' 
     });
   } catch (err) {
-    console.error(err.message);
+    (req.log || logger).error({ err, userId: req.user?.id, noteId: req.params?.id }, 'Permanent delete note error');
     res.status(500).json({ 
       success: false, 
       message: 'Server error: ' + err.message 
@@ -266,7 +268,7 @@ exports.permanentDeleteNote = async (req, res) => {
 
 exports.togglePin = async (req, res) => {
   try {
-    console.log(' Toggling pin for note:', req.params.id, 'for user:', req.user.id);
+    req.log && req.log.info({ noteId: req.params.id, userId: req.user.id }, 'Toggling pin for note');
     
     if (!req.params.id || req.params.id.length < 10) {
       return res.status(400).json({ 
@@ -278,7 +280,7 @@ exports.togglePin = async (req, res) => {
     const note = await Note.findOne({ _id: req.params.id, user: req.user.id });
     
     if (!note) {
-      console.log(' Note not found for pin toggle:', req.params.id);
+      req.log && req.log.warn({ noteId: req.params.id }, 'Note not found for pin toggle');
       return res.status(404).json({ 
         success: false, 
         message: 'Note not found' 
@@ -288,7 +290,7 @@ exports.togglePin = async (req, res) => {
     note.pinned = !note.pinned;
     await note.save();
     
-    console.log('Pin status updated:', note._id, 'Pinned:', note.pinned);
+    req.log && req.log.info({ noteId: note._id, pinned: note.pinned }, 'Pin status updated');
     
     res.json({
       success: true,
@@ -296,7 +298,7 @@ exports.togglePin = async (req, res) => {
       message: 'Note pin status updated'
     });
   } catch (err) {
-    console.error(' Toggle pin error:', err.message);
+    (req.log || logger).error({ err, userId: req.user?.id, noteId: req.params?.id }, 'Toggle pin error');
     
     if (err.name === 'CastError') {
       return res.status(400).json({ 
@@ -314,7 +316,7 @@ exports.togglePin = async (req, res) => {
 
 exports.toggleImportant = async (req, res) => {
   try {
-    console.log('Toggling important for note:', req.params.id, 'for user:', req.user.id);
+    req.log && req.log.info({ noteId: req.params.id, userId: req.user.id }, 'Toggling important for note');
     
     if (!req.params.id || req.params.id.length < 10) {
       return res.status(400).json({ 
@@ -326,7 +328,7 @@ exports.toggleImportant = async (req, res) => {
     const note = await Note.findOne({ _id: req.params.id, user: req.user.id });
     
     if (!note) {
-      console.log(' Note not found for important toggle:', req.params.id);
+      req.log && req.log.warn({ noteId: req.params.id }, 'Note not found for important toggle');
       return res.status(404).json({ 
         success: false, 
         message: 'Note not found' 
@@ -336,7 +338,7 @@ exports.toggleImportant = async (req, res) => {
     note.important = !note.important;
     await note.save();
     
-    console.log(' Important status updated:', note._id, 'Important:', note.important);
+    req.log && req.log.info({ noteId: note._id, important: note.important }, 'Important status updated');
     
     res.json({
       success: true,
@@ -344,7 +346,7 @@ exports.toggleImportant = async (req, res) => {
       message: 'Note importance status updated'
     });
   } catch (err) {
-    console.error(' Toggle important error:', err.message);
+    (req.log || logger).error({ err, userId: req.user?.id, noteId: req.params?.id }, 'Toggle important error');
     
     if (err.name === 'CastError') {
       return res.status(400).json({ 

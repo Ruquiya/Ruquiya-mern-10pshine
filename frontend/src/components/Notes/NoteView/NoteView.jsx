@@ -47,6 +47,21 @@ const NoteView = ({ note, onBack, darkMode = false, onEdit, onDelete, allNotes =
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  const sanitizeHtml = (html, type) => {
+    if (!html) return '';
+    // For text notes only: strip inline styles/alignments, data-URI images/audio, and convert stray divs
+    if (type && type !== 'text') return html;
+    return html
+      .replace(/\sstyle="[^"]*"/gi, '')
+      .replace(/\salign="[^"]*"/gi, '')
+      .replace(/<img[^>]*src=['"]data:[^'"]+['"][^>]*>/gi, '')
+      .replace(/<audio[^>]*src=['"]data:[^'"]+['"][^>]*>.*?<\/audio>/gi, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/<div><br><\/div>/gi, '<br>')
+      .replace(/<div[^>]*>/gi, '<br>')
+      .replace(/<\/div>/gi, '');
+  };
+
   React.useEffect(() => {
     const theme = darkMode ? themeStyles.dark : themeStyles.light;
     Object.entries(theme).forEach(([key, value]) => {
@@ -347,7 +362,7 @@ const NoteView = ({ note, onBack, darkMode = false, onEdit, onDelete, allNotes =
             {(!note.type || note.type === 'text') && (
               <div
                 className="prose prose-sm max-w-none text-[var(--text-secondary)] leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: note.content || '' }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(note.content || '', note.type) }}
               />
             )}
           </div>
