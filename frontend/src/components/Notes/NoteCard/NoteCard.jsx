@@ -2,6 +2,10 @@ import React from 'react';
 
 const NoteCard = ({ note, onClick, darkMode = true }) => {
   const getNoteColor = () => {
+    // Prefer explicit color saved on the note
+    if (note && note.color) {
+      return note.color;
+    }
     const colors = [
       { light: 'from-red-100 to-pink-200', dark: 'from-red-600/20 to-pink-600/30' },
       { light: 'from-blue-100 to-indigo-200', dark: 'from-blue-600/20 to-indigo-600/30' },

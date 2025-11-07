@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
+const logger = require('../utils/logger');
 
 const generateToken = (userId, rememberMe = false) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'fallback_secret', {
@@ -43,6 +44,7 @@ exports.register = async (req, res) => {
 
     const token = generateToken(user._id);
 
+    logger.info({ userId: user._id, email: user.email }, 'User registered');
     res.status(201).json({
       success: true,
       data: {
@@ -57,7 +59,7 @@ exports.register = async (req, res) => {
       token
     });
   } catch (error) {
-    console.error('Register error:', error);
+    logger.error({ err: error }, 'Register error');
 
     if (error.code === 11000 && error.keyPattern.username) {
       return res.status(400).json({
@@ -87,6 +89,7 @@ exports.login = async (req, res) => {
     const user = await User.findOne({ email }).select('+password');
     
     if (!user) {
+      logger.warn({ email }, 'Login failed: user not found');
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -95,6 +98,7 @@ exports.login = async (req, res) => {
 
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
+      logger.warn({ userId: user._id }, 'Login failed: invalid password');
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -114,6 +118,7 @@ exports.login = async (req, res) => {
     }
     const token = generateToken(user._id, rememberMe);
 
+    logger.info({ userId: user._id }, 'User logged in');
     res.json({
       success: true,
       data: {
@@ -129,7 +134,7 @@ exports.login = async (req, res) => {
       token
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error({ err: error }, 'Login error');
     
     res.status(500).json({
       success: false,
@@ -150,7 +155,7 @@ exports.getMe = async (req, res) => {
       data: userData
     });
   } catch (error) {
-    console.error('Get me error:', error);
+    logger.error({ err: error, userId: req.user?._id }, 'Get me error');
     res.status(500).json({
       success: false,
       message: error.message
@@ -211,6 +216,7 @@ exports.updateProfile = async (req, res) => {
     // Return updated user data
     const updatedUser = await User.findById(userId);
 
+    logger.info({ userId }, 'User profile updated');
     res.json({
       success: true,
       data: {
@@ -226,7 +232,7 @@ exports.updateProfile = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update profile error:', error);
+    logger.error({ err: error, userId: req.user?._id }, 'Update profile error');
     res.status(400).json({
       success: false,
       message: error.message
@@ -264,6 +270,7 @@ exports.uploadProfileImage = async (req, res) => {
     user.profilePicture = profilePictureUrl;
     await user.save();
 
+    logger.info({ userId: req.user._id }, 'Profile image uploaded');
     res.json({
       success: true,
       data: {
@@ -273,7 +280,7 @@ exports.uploadProfileImage = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Upload profile image error:', error);
+    logger.error({ err: error, userId: req.user?._id }, 'Upload profile image error');
     res.status(500).json({
       success: false,
       message: 'Failed to upload profile image'
